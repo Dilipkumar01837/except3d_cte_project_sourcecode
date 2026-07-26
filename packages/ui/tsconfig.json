@@ -1,0 +1,10 @@
+{
+  "extends": "@code-to-escape/config/typescript/react.json",
+  "compilerOptions": {
+    "outDir": "dist",
+    "rootDir": "src",
+    "noEmit": false,
+    "declaration": true
+  },
+  "include": ["src"]
+}

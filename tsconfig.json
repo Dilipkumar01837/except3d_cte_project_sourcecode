@@ -1,0 +1,13 @@
+{
+  "files": [],
+  "references": [
+    { "path": "apps/game-client" },
+    { "path": "apps/admin-dashboard" },
+    { "path": "apps/server" },
+    { "path": "packages/ui" },
+    { "path": "packages/game-engine" },
+    { "path": "packages/shared" },
+    { "path": "packages/types" },
+    { "path": "packages/utils" }
+  ]
+}

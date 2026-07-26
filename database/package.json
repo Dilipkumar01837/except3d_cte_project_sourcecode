@@ -1,0 +1,21 @@
+{
+  "name": "@code-to-escape/database",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "build": "prisma generate",
+    "generate": "prisma generate",
+    "migrate": "prisma migrate dev",
+    "migrate:deploy": "prisma migrate deploy",
+    "migrate:reset": "prisma migrate reset --force",
+    "studio": "prisma studio",
+    "lint": "echo \"No lint configured for database package\"",
+    "typecheck": "echo \"No typecheck configured for database package\""
+  },
+  "devDependencies": {
+    "prisma": "^6.1.0"
+  },
+  "dependencies": {
+    "@prisma/client": "^6.1.0"
+  }
+}

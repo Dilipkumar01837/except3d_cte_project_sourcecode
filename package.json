@@ -1,0 +1,40 @@
+{
+  "name": "code-to-escape",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Gamified real-time programming learning platform",
+  "engines": {
+    "node": ">=20.0.0",
+    "pnpm": ">=9.0.0"
+  },
+  "scripts": {
+    "dev": "turbo run dev",
+    "build": "turbo run build",
+    "lint": "turbo run lint",
+    "typecheck": "turbo run typecheck",
+    "format": "prettier --write \"**/*.{ts,tsx,js,json,md}\"",
+    "format:check": "prettier --check \"**/*.{ts,tsx,js,json,md}\"",
+    "db:generate": "pnpm --filter @code-to-escape/database run generate",
+    "db:migrate": "pnpm --filter @code-to-escape/database run migrate",
+    "db:migrate:deploy": "pnpm --filter @code-to-escape/database run migrate:deploy",
+    "db:migrate:reset": "pnpm --filter @code-to-escape/database run migrate:reset",
+    "db:studio": "pnpm --filter @code-to-escape/database run studio",
+    "docker:up": "docker compose up -d",
+    "docker:down": "docker compose down",
+    "prepare": "husky"
+  },
+  "devDependencies": {
+    "@code-to-escape/config": "workspace:*",
+    "husky": "^9.1.7",
+    "lint-staged": "^15.3.0",
+    "prettier": "^3.4.2",
+    "turbo": "^2.3.3",
+    "typescript": "^5.7.2"
+  },
+  "lint-staged": {
+    "*.{ts,tsx,js,json,md}": [
+      "prettier --write"
+    ]
+  },
+  "packageManager": "pnpm@9.15.4"
+}

@@ -1,0 +1,151 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ─────────────────────────────────────────
+// Enums
+// ─────────────────────────────────────────
+
+enum AuthProvider {
+  EMAIL
+  GOOGLE
+  GITHUB
+}
+
+enum PlayerRank {
+  BEGINNER
+  NOVICE
+  APPRENTICE
+  JOURNEYMAN
+  EXPERT
+  MASTER
+  GRANDMASTER
+}
+
+enum World {
+  PYTHON_FOREST
+  JAVASCRIPT_JUNGLE
+  TYPESCRIPT_TUNDRA
+  RUST_REALM
+  GO_GALAXY
+}
+
+// ─────────────────────────────────────────
+// User
+// ─────────────────────────────────────────
+
+model User {
+  id                String   @id @default(uuid())
+  email             String   @unique
+  username          String   @unique
+  passwordHash      String?
+  emailVerified     Boolean  @default(false)
+  emailVerifyToken  String?
+  resetPasswordToken String?
+  resetPasswordExpiry DateTime?
+  authProvider      AuthProvider @default(EMAIL)
+  oauthId           String?
+  avatarUrl         String?
+  isActive          Boolean  @default(true)
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  // Relations
+  profile        Profile?
+  sessions       Session[]
+  refreshTokens  RefreshToken[]
+  loginHistory   LoginHistory[]
+
+  @@index([email])
+  @@index([username])
+  @@index([oauthId])
+}
+
+// ─────────────────────────────────────────
+// Profile (game state)
+// ─────────────────────────────────────────
+
+model Profile {
+  id            String     @id @default(uuid())
+  userId        String     @unique
+  displayName   String
+  bio           String?
+  level         Int        @default(1)
+  xp            Int        @default(0)
+  coins         Int        @default(100)
+  rank          PlayerRank @default(BEGINNER)
+  currentWorld  World      @default(PYTHON_FOREST)
+  codingStreak  Int        @default(0)
+  lastStreakDate DateTime?
+  inventory     Json       @default("[]")
+  achievements  Json       @default("[]")
+  stats         Json       @default("{}")
+  createdAt     DateTime   @default(now())
+  updatedAt     DateTime   @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+// ─────────────────────────────────────────
+// Session
+// ─────────────────────────────────────────
+
+model Session {
+  id         String   @id @default(uuid())
+  userId     String
+  ipAddress  String?
+  userAgent  String?
+  isActive   Boolean  @default(true)
+  lastSeenAt DateTime @default(now())
+  expiresAt  DateTime
+  createdAt  DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+// ─────────────────────────────────────────
+// RefreshToken
+// ─────────────────────────────────────────
+
+model RefreshToken {
+  id        String   @id @default(uuid())
+  userId    String
+  tokenHash String   @unique
+  family    String   // token rotation family ID
+  isRevoked Boolean  @default(false)
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([tokenHash])
+}
+
+// ─────────────────────────────────────────
+// LoginHistory
+// ─────────────────────────────────────────
+
+model LoginHistory {
+  id        String   @id @default(uuid())
+  userId    String
+  ipAddress String?
+  userAgent String?
+  provider  AuthProvider
+  success   Boolean
+  failReason String?
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
