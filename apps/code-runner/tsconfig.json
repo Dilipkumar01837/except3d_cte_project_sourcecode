@@ -1,0 +1,5 @@
+{
+  "extends": "@code-to-escape/config/typescript/node.json",
+  "compilerOptions": { "outDir": "dist", "rootDir": "src" },
+  "include": ["src"]
+}

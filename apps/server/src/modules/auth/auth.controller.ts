@@ -1,6 +1,8 @@
 import type { Request, Response } from 'express';
 import { prisma } from '../../shared/lib/prisma.js';
 import { sendSuccess, sendError } from '../../shared/lib/response.js';
+import { emailService, buildPasswordResetEmail } from '../../shared/lib/email.js';
+import { env } from '../../config/index.js';
 import {
   registerUser,
   loginUser,
@@ -40,6 +42,7 @@ interface FormattableUser {
   emailVerified: boolean;
   avatarUrl: string | null;
   authProvider: string;
+  role: string;
   createdAt: Date;
   profile: {
     displayName: string;
@@ -61,6 +64,7 @@ function formatUser(user: FormattableUser) {
     emailVerified: user.emailVerified,
     avatarUrl: user.avatarUrl,
     authProvider: user.authProvider,
+    role: user.role,
     createdAt: user.createdAt,
     profile: user.profile,
   };
@@ -115,9 +119,18 @@ export async function refresh(req: Request, res: Response): Promise<void> {
 // POST /auth/forgot-password
 export async function forgotPasswordHandler(req: Request, res: Response): Promise<void> {
   const { email } = req.body as ForgotPasswordInput;
-  await forgotPassword(email);
+  const token = await forgotPassword(email);
 
-  // In production, send email here — we always return 200 to prevent email enumeration
+  // Always return 200 to prevent email enumeration
+  // Send email if a token was generated (user exists and uses email auth)
+  if (token) {
+    const resetUrl = `${env.appUrl}/reset-password?token=${token}`;
+    await emailService.send({
+      to: email,
+      ...buildPasswordResetEmail(resetUrl),
+    });
+  }
+
   sendSuccess(res, {
     message: 'If an account with that email exists, you will receive a password reset email.',
   });
@@ -165,12 +178,12 @@ export async function updateProfile(req: Request, res: Response): Promise<void> 
     avatarUrl?: string | null;
   };
 
+  // Profile and User share some fields — update each model's own columns only
   const profile = await prisma.profile.update({
     where: { userId },
     data: {
       ...(displayName !== undefined && { displayName }),
       ...(bio !== undefined && { bio }),
-      ...(avatarUrl !== undefined && { avatarUrl }),
     },
   });
 

@@ -1,6 +1,7 @@
 import { useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { useAuthStore } from '@/features/auth/store/auth.store';
+import { DailyRewardWidget } from '@/features/daily-reward/components/DailyRewardWidget';
 
 const RANK_COLORS: Record<string, string> = {
   BEGINNER: 'text-gray-400',
@@ -59,6 +60,12 @@ export function DashboardPage() {
           </div>
           <div className="flex gap-2">
             <Link
+              to="/challenges"
+              className="rounded-lg bg-brand-500 px-4 py-2 text-sm font-semibold text-white hover:bg-brand-500/90 transition-colors"
+            >
+              Play challenges
+            </Link>
+            <Link
               to="/profile"
               className="rounded-lg border border-brand-500/30 px-4 py-2 text-sm text-brand-50/80 hover:bg-brand-500/10 transition-colors"
             >
@@ -110,6 +117,9 @@ export function DashboardPage() {
             </p>
           </div>
         )}
+
+        {/* Daily Reward */}
+        <DailyRewardWidget />
 
         {/* Account Info */}
         <div className="rounded-xl border border-brand-500/20 bg-brand-900/60 p-4">

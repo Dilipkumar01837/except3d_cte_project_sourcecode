@@ -10,6 +10,8 @@ import { ResetPasswordPage } from '@/features/auth/components/ResetPasswordPage'
 import { DashboardPage } from '@/features/dashboard/components/DashboardPage';
 import { ProfilePage } from '@/features/profile/components/ProfilePage';
 import { SettingsPage } from '@/features/settings/components/SettingsPage';
+import { ChallengeListPage } from '@/features/challenges/components/ChallengeListPage';
+import { ChallengePlayerPage } from '@/features/challenges/components/ChallengePlayerPage';
 
 export function AppRouter() {
   return (
@@ -17,6 +19,9 @@ export function AppRouter() {
       {/* Public routes with full layout */}
       <Route element={<AppLayout />}>
         <Route index element={<HomePage />} />
+        <Route path="/explore" element={<ChallengeListPage />} />
+        {/* /reserve redirects to home — reservation page removed (no product purpose) */}
+        <Route path="/reserve" element={<Navigate to="/" replace />} />
       </Route>
 
       {/* Auth routes (no layout) */}
@@ -47,6 +52,22 @@ export function AppRouter() {
         element={
           <ProtectedRoute>
             <SettingsPage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/challenges"
+        element={
+          <ProtectedRoute>
+            <ChallengeListPage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/challenges/:slug"
+        element={
+          <ProtectedRoute>
+            <ChallengePlayerPage />
           </ProtectedRoute>
         }
       />

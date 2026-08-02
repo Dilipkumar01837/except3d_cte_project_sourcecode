@@ -65,7 +65,10 @@ export function ResetPasswordPage() {
         className="flex flex-col gap-4"
       >
         {error && (
-          <div className="rounded-lg bg-red-500/10 border border-red-500/30 px-4 py-3 text-sm text-red-400">
+          <div
+            role="alert"
+            className="rounded-lg bg-red-500/10 border border-red-500/30 px-4 py-3 text-sm text-red-400"
+          >
             {error}
           </div>
         )}

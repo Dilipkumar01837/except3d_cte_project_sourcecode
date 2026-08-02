@@ -17,6 +17,13 @@ enum AuthProvider {
   GITHUB
 }
 
+enum UserRole {
+  PLAYER
+  MODERATOR
+  ADMIN
+  SUPER_ADMIN
+}
+
 enum PlayerRank {
   BEGINNER
   NOVICE
@@ -52,6 +59,7 @@ model User {
   oauthId           String?
   avatarUrl         String?
   isActive          Boolean  @default(true)
+  role              UserRole @default(PLAYER)
   createdAt         DateTime @default(now())
   updatedAt         DateTime @updatedAt
 
@@ -60,6 +68,13 @@ model User {
   sessions       Session[]
   refreshTokens  RefreshToken[]
   loginHistory   LoginHistory[]
+  achievements   PlayerAchievement[]
+  inventory      PlayerInventory[]
+  worldProgress  PlayerWorldProgress[]
+  levelProgress  PlayerLevelProgress[]
+  dailyRewards   PlayerDailyReward[]
+  notifications  PlayerNotification[]
+  submissions    Submission[]
 
   @@index([email])
   @@index([username])
@@ -85,6 +100,15 @@ model Profile {
   inventory     Json       @default("[]")
   achievements  Json       @default("[]")
   stats         Json       @default("{}")
+  country       String?
+  favoriteLanguage String?
+  programmingInterests String[] @default([])
+  energy        Int        @default(10)
+  lives         Int        @default(3)
+  completedChallenges Int @default(0)
+  accuracy      Float      @default(0)
+  gamesPlayed   Int        @default(0)
+  longestStreak Int        @default(0)
   createdAt     DateTime   @default(now())
   updatedAt     DateTime   @updatedAt
 
@@ -129,6 +153,8 @@ model RefreshToken {
 
   @@index([userId])
   @@index([tokenHash])
+  @@index([family])
+  @@index([expiresAt, isRevoked])
 }
 
 // ─────────────────────────────────────────
@@ -148,4 +174,327 @@ model LoginHistory {
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId])
+}
+
+enum AchievementCategory {
+  CODING
+  EXPLORATION
+  SPEED
+  ACCURACY
+  STREAK
+  COLLECTION
+}
+
+enum NotificationType {
+  ACHIEVEMENT_UNLOCKED
+  LEVEL_COMPLETED
+  DAILY_REWARD
+  FRIEND_REQUEST
+  SYSTEM
+}
+
+enum ProgrammingLanguage {
+  PYTHON
+  JAVA
+  JAVASCRIPT
+  TYPESCRIPT
+  CPP
+  GO
+  RUST
+}
+
+enum ChallengeDifficulty {
+  EASY
+  MEDIUM
+  HARD
+}
+
+enum ChallengeType {
+  ALGORITHMS
+  DATA_STRUCTURES
+  DEBUGGING
+  OUTPUT_PREDICTION
+  FILL_IN_THE_BLANK
+  CODE_COMPLETION
+}
+
+enum SubmissionStatus {
+  QUEUED
+  RUNNING
+  ACCEPTED
+  WRONG_ANSWER
+  COMPILATION_ERROR
+  RUNTIME_ERROR
+  TIME_LIMIT_EXCEEDED
+  MEMORY_LIMIT_EXCEEDED
+  INTERNAL_ERROR
+}
+
+model GameWorld {
+  id          String   @id @default(uuid())
+  slug        String   @unique
+  name        String
+  description String
+  difficulty  Int      @default(1)
+  requiredXp  Int      @default(0)
+  estimatedMinutes Int @default(30)
+  imageUrl    String?
+  sortOrder   Int      @unique
+  isPublished Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  levels     GameLevel[]
+  progress   PlayerWorldProgress[]
+}
+
+model GameLevel {
+  id          String   @id @default(uuid())
+  worldId     String
+  number      Int
+  title       String
+  description String
+  difficulty  Int      @default(1)
+  xpReward    Int      @default(50)
+  previewUrl  String?
+  isPublished Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  world       GameWorld @relation(fields: [worldId], references: [id], onDelete: Cascade)
+  progress    PlayerLevelProgress[]
+  @@unique([worldId, number])
+  @@index([worldId, isPublished])
+}
+
+model PlayerWorldProgress {
+  id          String   @id @default(uuid())
+  userId      String
+  worldId     String
+  isUnlocked  Boolean  @default(false)
+  completionPercent Int @default(0)
+  lastPlayedAt DateTime?
+  completedAt DateTime?
+
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  world       GameWorld @relation(fields: [worldId], references: [id], onDelete: Cascade)
+  @@unique([userId, worldId])
+  @@index([userId, isUnlocked])
+}
+
+model PlayerLevelProgress {
+  id          String   @id @default(uuid())
+  userId      String
+  levelId     String
+  isCompleted Boolean  @default(false)
+  stars       Int      @default(0)
+  attempts    Int      @default(0)
+  bestTimeSeconds Int?
+  completedAt DateTime?
+  lastPlayedAt DateTime?
+
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  level       GameLevel @relation(fields: [levelId], references: [id], onDelete: Cascade)
+  @@unique([userId, levelId])
+  @@index([userId, isCompleted])
+}
+
+model Achievement {
+  id          String   @id @default(uuid())
+  slug        String   @unique
+  name        String
+  description String
+  category    AchievementCategory
+  iconUrl     String?
+  target      Int      @default(1)
+  xpReward    Int      @default(0)
+  isHidden    Boolean  @default(false)
+  isPublished Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  players     PlayerAchievement[]
+}
+
+model PlayerAchievement {
+  id            String   @id @default(uuid())
+  userId        String
+  achievementId String
+  progress      Int      @default(0)
+  unlockedAt    DateTime?
+
+  user          User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  achievement   Achievement @relation(fields: [achievementId], references: [id], onDelete: Cascade)
+  @@unique([userId, achievementId])
+  @@index([userId, unlockedAt])
+}
+
+model InventoryItem {
+  id          String   @id @default(uuid())
+  slug        String   @unique
+  name        String
+  description String
+  category    String
+  rarity      String   @default("COMMON")
+  iconUrl     String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  players     PlayerInventory[]
+}
+
+model PlayerInventory {
+  id        String   @id @default(uuid())
+  userId    String
+  itemId    String
+  quantity  Int      @default(1)
+  acquiredAt DateTime @default(now())
+  user      User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  item      InventoryItem @relation(fields: [itemId], references: [id], onDelete: Cascade)
+  @@unique([userId, itemId])
+}
+
+model DailyReward {
+  id          String   @id @default(uuid())
+  day         Int      @unique
+  xpAmount    Int      @default(0)
+  coinAmount  Int      @default(0)
+  itemId      String?
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  claims      PlayerDailyReward[]
+}
+
+model PlayerDailyReward {
+  id        String   @id @default(uuid())
+  userId    String
+  rewardId  String
+  claimedAt DateTime @default(now())
+  user      User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  reward    DailyReward @relation(fields: [rewardId], references: [id], onDelete: Restrict)
+  @@index([userId, claimedAt])
+}
+
+model PlayerNotification {
+  id        String           @id @default(uuid())
+  userId    String
+  type      NotificationType
+  title     String
+  body      String
+  data      Json?
+  readAt    DateTime?
+  createdAt DateTime         @default(now())
+  user      User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  @@index([userId, readAt, createdAt])
+}
+
+model Challenge {
+  id              String              @id @default(uuid())
+  slug            String              @unique
+  title           String
+  statement       String
+  constraints     String?
+  starterCode     Json                @default("{}")
+  difficulty      ChallengeDifficulty
+  type            ChallengeType
+  tags            String[]            @default([])
+  supportedLanguages ProgrammingLanguage[]
+  xpReward        Int                 @default(50)
+  timeLimitMs     Int                 @default(2000)
+  memoryLimitMb   Int                 @default(128)
+  isPublished     Boolean             @default(false)
+  createdAt       DateTime            @default(now())
+  updatedAt       DateTime            @updatedAt
+  testCases       ChallengeTestCase[]
+  solutions       ChallengeSolution[]
+  hints           ChallengeHint[]
+  submissions     Submission[]
+  @@index([isPublished, difficulty])
+  @@index([type])
+}
+
+model ChallengeTestCase {
+  id          String    @id @default(uuid())
+  challengeId String
+  input       String
+  expectedOutput String
+  explanation String?
+  isHidden    Boolean   @default(false)
+  weight      Int       @default(1)
+  sortOrder   Int       @default(0)
+  challenge   Challenge @relation(fields: [challengeId], references: [id], onDelete: Cascade)
+  @@index([challengeId, isHidden])
+}
+
+model ChallengeSolution {
+  id          String              @id @default(uuid())
+  challengeId String
+  language    ProgrammingLanguage
+  code        String
+  explanation String?
+  challenge   Challenge           @relation(fields: [challengeId], references: [id], onDelete: Cascade)
+  @@unique([challengeId, language])
+}
+
+model ChallengeHint {
+  id          String    @id @default(uuid())
+  challengeId String
+  level       Int
+  content     String
+  xpPenalty   Int       @default(0)
+  challenge   Challenge @relation(fields: [challengeId], references: [id], onDelete: Cascade)
+  @@unique([challengeId, level])
+}
+
+model Submission {
+  id          String              @id @default(uuid())
+  userId      String
+  challengeId String
+  language    ProgrammingLanguage
+  sourceCode  String
+  status      SubmissionStatus    @default(QUEUED)
+  score       Int                 @default(0)
+  executionTimeMs Int?
+  memoryUsedKb Int?
+  compilerOutput String?
+  runtimeOutput String?
+  createdAt   DateTime            @default(now())
+  completedAt DateTime?
+  user        User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  challenge   Challenge           @relation(fields: [challengeId], references: [id], onDelete: Cascade)
+  results     SubmissionTestResult[]
+  @@index([userId, challengeId, createdAt])
+  @@index([status, createdAt])
+}
+
+model SubmissionTestResult {
+  id          String    @id @default(uuid())
+  submissionId String
+  testCaseId  String
+  passed      Boolean
+  executionTimeMs Int?
+  memoryUsedKb Int?
+  output      String?
+  submission  Submission @relation(fields: [submissionId], references: [id], onDelete: Cascade)
+  @@unique([submissionId, testCaseId])
+}
+
+// ─────────────────────────────────────────
+// Admin Audit Log
+// ─────────────────────────────────────────
+
+model AdminAuditLog {
+  id          String   @id @default(uuid())
+  adminId     String
+  action      String   // e.g. "USER_ROLE_UPDATED", "CHALLENGE_PUBLISHED"
+  targetType  String?  // e.g. "User", "Challenge"
+  targetId    String?
+  before      Json?
+  after       Json?
+  ipAddress   String?
+  userAgent   String?
+  createdAt   DateTime @default(now())
+
+  @@index([adminId, createdAt])
+  @@index([action, createdAt])
+  @@index([targetType, targetId])
 }

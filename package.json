@@ -21,6 +21,7 @@
     "db:studio": "pnpm --filter @code-to-escape/database run studio",
     "docker:up": "docker compose up -d",
     "docker:down": "docker compose down",
+    "test:e2e": "pnpm --filter @code-to-escape/e2e test",
     "prepare": "husky"
   },
   "devDependencies": {
@@ -28,6 +29,7 @@
     "husky": "^9.1.7",
     "lint-staged": "^15.3.0",
     "prettier": "^3.4.2",
+    "prisma": "^6.1.0",
     "turbo": "^2.3.3",
     "typescript": "^5.7.2"
   },

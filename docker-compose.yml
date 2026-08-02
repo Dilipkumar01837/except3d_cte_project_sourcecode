@@ -29,6 +29,39 @@ services:
       timeout: 3s
       retries: 5
 
+  code-runner-sandbox:
+    build:
+      context: .
+      dockerfile: docker/code-runner/sandbox.Dockerfile
+    image: code-to-escape/sandbox:latest
+    entrypoint: ['true']
+    restart: 'no'
+
+  code-runner:
+    build:
+      context: .
+      dockerfile: docker/code-runner/Dockerfile
+    container_name: cte-code-runner
+    environment:
+      PORT: 3002
+      CODE_RUNNER_BIND_HOST: 0.0.0.0
+      CODE_RUNNER_TOKEN: ${CODE_RUNNER_TOKEN:-code-to-escape-dev-runner-token}
+      CODE_RUNNER_IMAGE: code-to-escape/sandbox:latest
+    ports:
+      - '127.0.0.1:3002:3002'
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    security_opt:
+      - no-new-privileges:true
+    read_only: true
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,nodev,size=16m
+    depends_on:
+      redis:
+        condition: service_healthy
+      code-runner-sandbox:
+        condition: service_completed_successfully
+
 volumes:
   postgres_data:
   redis_data:

@@ -9,3 +9,13 @@ body {
   background-color: #0f172a;
   color: #f8fafc;
 }
+
+@layer components {
+  .input {
+    @apply w-full rounded-lg border border-slate-700 bg-slate-800 px-3 py-2 text-sm text-slate-100 outline-none placeholder:text-slate-500 focus:border-cyan-400/50 focus:ring-1 focus:ring-cyan-400/20 transition;
+  }
+
+  .label {
+    @apply block mb-1.5 text-xs font-medium text-slate-400;
+  }
+}

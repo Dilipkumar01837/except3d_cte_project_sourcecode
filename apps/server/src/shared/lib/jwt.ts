@@ -1,10 +1,12 @@
 import jwt from 'jsonwebtoken';
+import type { UserRole } from '@prisma/client';
 import { env } from '../../config/index.js';
 
 export interface AccessTokenPayload {
   sub: string; // userId
   username: string;
   email: string;
+  role: UserRole;
 }
 
 export interface RefreshTokenPayload {

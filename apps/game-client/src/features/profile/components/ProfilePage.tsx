@@ -29,9 +29,12 @@ export function ProfilePage() {
     void updateProfile({ displayName: data.displayName, bio: data.bio })
       .then(() => {
         setSaved(true);
-        setTimeout(() => {
+        const timer = setTimeout(() => {
           setSaved(false);
         }, 3000);
+        return () => {
+          clearTimeout(timer);
+        };
       })
       .catch(() => {
         // error shown via store

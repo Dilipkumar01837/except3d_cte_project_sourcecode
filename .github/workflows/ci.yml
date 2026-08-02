@@ -6,25 +6,100 @@ on:
   pull_request:
     branches: [main, master, develop]
 
+env:
+  # Minimal env for typecheck/lint/build — no real secrets needed
+  NODE_ENV: test
+  DATABASE_URL: postgresql://ci:ci@localhost:5432/cte_ci
+  REDIS_URL: redis://localhost:6379
+  JWT_SECRET: ci-jwt-secret-not-for-prod
+  REFRESH_TOKEN_SECRET: ci-refresh-secret-not-for-prod
+  CODE_RUNNER_TOKEN: ci-runner-token
+
 jobs:
   quality:
+    name: Lint · Typecheck · Build
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+
       - uses: pnpm/action-setup@v4
         with:
           version: 9
+
       - uses: actions/setup-node@v4
         with:
           node-version: 20
           cache: pnpm
-      - run: pnpm install --frozen-lockfile
-      - run: pnpm db:generate
-      - run: pnpm lint
-      - run: pnpm typecheck
-      - run: pnpm build
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Generate Prisma client
+        run: pnpm db:generate
+
+      - name: Lint
+        run: pnpm lint
+
+      - name: Typecheck
+        run: pnpm typecheck
+
+      - name: Build
+        run: pnpm build
+
+  test:
+    name: Unit tests
+    runs-on: ubuntu-latest
+    needs: quality
+
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: ci
+          POSTGRES_PASSWORD: ci
+          POSTGRES_DB: cte_ci
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
+
+      redis:
+        image: redis:7-alpine
+        ports: ["6379:6379"]
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Generate Prisma client
+        run: pnpm db:generate
+
+      - name: Run migrations
+        run: pnpm --filter @code-to-escape/server exec npx prisma migrate deploy --schema ../../database/prisma/schema.prisma
+
+      - name: Run server unit tests
+        run: pnpm --filter @code-to-escape/server test
 
   docker:
+    name: Docker Compose config
     runs-on: ubuntu-latest
     needs: quality
     steps:

@@ -1,8 +1,10 @@
 import { prisma } from '../../shared/lib/prisma.js';
+import type { UserRole } from '@prisma/client';
 import { hashPassword, verifyPassword, hashToken, generateToken } from '../../shared/lib/crypto.js';
 import { signAccessToken, signRefreshToken, verifyRefreshToken } from '../../shared/lib/jwt.js';
 import { env } from '../../config/index.js';
 import type { RegisterInput, LoginInput } from './auth.schema.js';
+import { evaluateAchievements } from '../challenges/achievement.service.js';
 
 // ─────────────────────────────────────────────────────────────────
 // Helpers
@@ -30,7 +32,13 @@ function sessionExpiryDate(): Date {
   return new Date(Date.now() + seconds * 1000);
 }
 
-async function issueTokenPair(userId: string, username: string, email: string, family: string) {
+async function issueTokenPair(
+  userId: string,
+  username: string,
+  email: string,
+  role: UserRole,
+  family: string,
+) {
   const rawRefreshToken = generateToken(40);
   const tokenHash = hashToken(rawRefreshToken);
 
@@ -43,7 +51,7 @@ async function issueTokenPair(userId: string, username: string, email: string, f
     },
   });
 
-  const accessToken = signAccessToken({ sub: userId, username, email });
+  const accessToken = signAccessToken({ sub: userId, username, email, role });
   const refreshToken = signRefreshToken({ sub: userId, family, tokenId: rawRefreshToken });
 
   return { accessToken, refreshToken };
@@ -97,6 +105,7 @@ export async function registerUser(input: RegisterInput, ipAddress?: string, use
     user.id,
     user.username,
     user.email,
+    user.role,
     family,
   );
 
@@ -118,6 +127,9 @@ export async function registerUser(input: RegisterInput, ipAddress?: string, use
       success: true,
     },
   });
+
+  // Evaluate first-login achievement (non-blocking)
+  void evaluateAchievements({ userId: user.id, trigger: 'FIRST_LOGIN' });
 
   return { user, accessToken, refreshToken };
 }
@@ -168,6 +180,7 @@ export async function loginUser(input: LoginInput, ipAddress?: string, userAgent
     user.id,
     user.username,
     user.email,
+    user.role,
     family,
   );
 
@@ -231,6 +244,7 @@ export async function refreshTokens(rawRefreshToken: string) {
     user.id,
     user.username,
     user.email,
+    user.role,
     stored.family,
   );
 
@@ -387,6 +401,7 @@ export async function oauthLogin(
     user.id,
     user.username,
     user.email,
+    user.role,
     family,
   );
 
