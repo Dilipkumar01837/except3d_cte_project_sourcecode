@@ -83,12 +83,15 @@ export const useAuthStore = create<AuthStore>()(
       },
 
       loadUser: async () => {
-        const { accessToken } = get();
+        const { accessToken, user } = get();
         if (!accessToken) return;
-        set({ isLoading: true });
+        // Only block the UI on the initial session hydrate — background refreshes
+        // must not flip isLoading or ProtectedRoute will unmount its children.
+        const isInitialLoad = !user;
+        if (isInitialLoad) set({ isLoading: true });
         try {
-          const user = await authApi.getMe();
-          set({ user, isAuthenticated: true, isLoading: false });
+          const fetchedUser = await authApi.getMe();
+          set({ user: fetchedUser, isAuthenticated: true, isLoading: false });
         } catch {
           localStorage.removeItem('access_token');
           set({ user: null, accessToken: null, isAuthenticated: false, isLoading: false });

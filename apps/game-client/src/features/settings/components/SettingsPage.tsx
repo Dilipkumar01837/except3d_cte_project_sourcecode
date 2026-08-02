@@ -2,6 +2,8 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuthStore } from '@/features/auth/store/auth.store';
 import { authApi } from '@/shared/lib/auth-api';
+import { PlayerPageShell } from '@/shared/components/layout/PlayerPageShell';
+import { GlassPanel, MetaRow, PanelHeading } from '@/shared/components/ui/player-ui';
 import { FormButton } from '@/shared/components/ui/FormButton';
 
 export function SettingsPage() {
@@ -35,90 +37,72 @@ export function SettingsPage() {
   if (!user) return null;
 
   return (
-    <div className="min-h-screen bg-brand-900 px-4 py-8">
-      <div className="mx-auto max-w-2xl space-y-6">
-        <h1 className="text-2xl font-bold text-white">Settings</h1>
+    <PlayerPageShell
+      eyebrow="Preferences"
+      title="Settings"
+      subtitle="Manage your account, session, and data on this device."
+      maxWidth="2xl"
+    >
+      <GlassPanel className="p-6">
+        <PanelHeading title="Account" description="Basic details tied to your escape profile." />
+        <MetaRow label="Username" value={`@${user.username}`} />
+        <MetaRow label="Email" value={user.email} />
+        <MetaRow label="Sign-in method" value={user.authProvider} />
+        <MetaRow label="Joined" value={new Date(user.createdAt).toLocaleDateString()} />
+      </GlassPanel>
 
-        {/* Account Info */}
-        <div className="rounded-xl border border-brand-500/20 bg-brand-900/60 p-6">
-          <h2 className="text-lg font-semibold text-white mb-4">Account</h2>
-          <div className="space-y-3 text-sm">
-            <div className="flex justify-between py-2 border-b border-brand-500/10">
-              <span className="text-brand-50/50">Username</span>
-              <span className="text-brand-50/80">@{user.username}</span>
-            </div>
-            <div className="flex justify-between py-2 border-b border-brand-500/10">
-              <span className="text-brand-50/50">Email</span>
-              <span className="text-brand-50/80">{user.email}</span>
-            </div>
-            <div className="flex justify-between py-2 border-b border-brand-500/10">
-              <span className="text-brand-50/50">Auth Method</span>
-              <span className="text-brand-50/80">{user.authProvider}</span>
-            </div>
-            <div className="flex justify-between py-2">
-              <span className="text-brand-50/50">Joined</span>
-              <span className="text-brand-50/80">
-                {new Date(user.createdAt).toLocaleDateString()}
-              </span>
+      <GlassPanel className="p-6">
+        <PanelHeading
+          title="Session"
+          description="Sign out from this browser. Your progress stays saved on the server."
+        />
+        <FormButton variant="ghost" onClick={handleLogout} loading={loggingOut} fullWidth={false}>
+          Sign out
+        </FormButton>
+      </GlassPanel>
+
+      <GlassPanel className="border-rose-400/20 bg-rose-950/20 p-6">
+        <PanelHeading
+          title="Danger zone"
+          description="Permanently delete your account and all associated game data. This cannot be undone."
+        />
+        {!showConfirm ? (
+          <FormButton
+            variant="danger"
+            fullWidth={false}
+            onClick={() => {
+              setShowConfirm(true);
+            }}
+          >
+            Delete account
+          </FormButton>
+        ) : (
+          <div className="space-y-3">
+            <p className="text-sm font-medium text-rose-200">
+              Are you sure? This removes your profile, progress, and submissions.
+            </p>
+            <div className="flex flex-wrap gap-2">
+              <FormButton
+                variant="danger"
+                fullWidth={false}
+                loading={deleting}
+                onClick={handleDeleteAccount}
+              >
+                Yes, delete everything
+              </FormButton>
+              <FormButton
+                variant="ghost"
+                fullWidth={false}
+                onClick={() => {
+                  setShowConfirm(false);
+                }}
+              >
+                Cancel
+              </FormButton>
             </div>
           </div>
-        </div>
-
-        {/* Session */}
-        <div className="rounded-xl border border-brand-500/20 bg-brand-900/60 p-6">
-          <h2 className="text-lg font-semibold text-white mb-4">Session</h2>
-          <p className="text-sm text-brand-50/50 mb-4">
-            Sign out from this device. Your progress will be saved.
-          </p>
-          <FormButton variant="ghost" onClick={handleLogout} loading={loggingOut} fullWidth={false}>
-            Sign Out
-          </FormButton>
-        </div>
-
-        {/* Danger Zone */}
-        <div className="rounded-xl border border-red-500/20 bg-red-900/10 p-6">
-          <h2 className="text-lg font-semibold text-red-400 mb-2">Danger Zone</h2>
-          <p className="text-sm text-brand-50/50 mb-4">
-            Permanently delete your account and all associated data. This cannot be undone.
-          </p>
-          {!showConfirm ? (
-            <FormButton
-              variant="danger"
-              fullWidth={false}
-              onClick={() => {
-                setShowConfirm(true);
-              }}
-            >
-              Delete Account
-            </FormButton>
-          ) : (
-            <div className="space-y-3">
-              <p className="text-sm text-red-400 font-medium">
-                Are you absolutely sure? This action is irreversible.
-              </p>
-              <div className="flex gap-2">
-                <FormButton
-                  variant="danger"
-                  fullWidth={false}
-                  loading={deleting}
-                  onClick={handleDeleteAccount}
-                >
-                  Yes, Delete Everything
-                </FormButton>
-                <FormButton
-                  variant="ghost"
-                  fullWidth={false}
-                  onClick={() => {
-                    setShowConfirm(false);
-                  }}
-                >
-                  Cancel
-                </FormButton>
-              </div>
-            </div>
-          )}
-        </div>
-      </div>
-    </div>
+        )}
+      </GlassPanel>
+    </PlayerPageShell>
   );
 }

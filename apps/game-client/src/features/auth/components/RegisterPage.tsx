@@ -105,9 +105,9 @@ export function RegisterPage() {
           Create Account
         </FormButton>
 
-        <p className="text-center text-sm text-brand-50/60">
+        <p className="text-center text-sm text-slate-400">
           Already have an account?{' '}
-          <Link to="/login" className="text-brand-500 hover:underline">
+          <Link to="/login" className="text-cyan-300 hover:text-cyan-200">
             Sign in
           </Link>
         </p>

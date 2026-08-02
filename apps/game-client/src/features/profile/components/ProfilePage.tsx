@@ -1,6 +1,8 @@
 import { useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { useAuthStore } from '@/features/auth/store/auth.store';
+import { PlayerPageShell } from '@/shared/components/layout/PlayerPageShell';
+import { GlassPanel, PanelHeading, StatTile } from '@/shared/components/ui/player-ui';
 import { Input } from '@/shared/components/ui/Input';
 import { FormButton } from '@/shared/components/ui/FormButton';
 
@@ -43,95 +45,89 @@ export function ProfilePage() {
 
   if (!user) return null;
 
+  const displayName = user.profile?.displayName ?? user.username;
+
   return (
-    <div className="min-h-screen bg-brand-900 px-4 py-8">
-      <div className="mx-auto max-w-2xl space-y-6">
-        <h1 className="text-2xl font-bold text-white">Your Profile</h1>
-
-        {/* Avatar placeholder */}
-        <div className="flex items-center gap-4 rounded-xl border border-brand-500/20 bg-brand-900/60 p-4">
-          <div className="h-16 w-16 rounded-full bg-brand-500/30 flex items-center justify-center text-2xl font-bold text-brand-500">
-            {(user.profile?.displayName ?? user.username)[0]?.toUpperCase()}
-          </div>
-          <div>
-            <p className="font-semibold text-white">{user.profile?.displayName ?? user.username}</p>
-            <p className="text-sm text-brand-50/50">@{user.username}</p>
-          </div>
+    <PlayerPageShell
+      eyebrow="Identity"
+      title="Your profile"
+      subtitle="How other players see you across missions, leaderboards, and your escape journey."
+      maxWidth="2xl"
+    >
+      <GlassPanel className="flex items-center gap-5 p-6">
+        <div className="grid h-16 w-16 shrink-0 place-items-center rounded-2xl bg-gradient-to-br from-cyan-300 to-violet-400 text-xl font-black text-slate-950">
+          {displayName.slice(0, 1).toUpperCase()}
         </div>
+        <div>
+          <p className="text-lg font-bold text-white">{displayName}</p>
+          <p className="text-sm text-slate-400">@{user.username}</p>
+        </div>
+      </GlassPanel>
 
-        {/* Edit Form */}
-        <div className="rounded-xl border border-brand-500/20 bg-brand-900/60 p-6">
-          <h2 className="text-lg font-semibold text-white mb-4">Edit Profile</h2>
+      <GlassPanel className="p-6">
+        <PanelHeading title="Edit profile" description="Update your public name and short bio." />
 
-          <form
-            onSubmit={(e) => {
-              e.preventDefault();
-              void handleSubmit(onSubmit)(e);
-            }}
-            className="flex flex-col gap-4"
-          >
-            {error && (
-              <div className="rounded-lg bg-red-500/10 border border-red-500/30 px-4 py-3 text-sm text-red-400">
-                {error}
-              </div>
-            )}
-            {saved && (
-              <div className="rounded-lg bg-green-500/10 border border-green-500/30 px-4 py-3 text-sm text-green-400">
-                Profile updated successfully!
-              </div>
-            )}
+        <form
+          onSubmit={(e) => {
+            e.preventDefault();
+            void handleSubmit(onSubmit)(e);
+          }}
+          className="flex flex-col gap-4"
+        >
+          {error && (
+            <div
+              role="alert"
+              className="rounded-xl border border-rose-400/30 bg-rose-400/10 px-4 py-3 text-sm text-rose-200"
+            >
+              {error}
+            </div>
+          )}
+          {saved && (
+            <div className="rounded-xl border border-emerald-400/30 bg-emerald-400/10 px-4 py-3 text-sm text-emerald-200">
+              Profile updated successfully.
+            </div>
+          )}
 
-            <Input
-              id="displayName"
-              label="Display Name"
-              type="text"
-              error={errors.displayName?.message}
-              {...register('displayName', { required: 'Display name is required' })}
+          <Input
+            id="displayName"
+            label="Display name"
+            type="text"
+            error={errors.displayName?.message}
+            {...register('displayName', { required: 'Display name is required' })}
+          />
+
+          <div className="flex flex-col gap-1">
+            <label htmlFor="bio" className="text-sm font-medium text-slate-300">
+              Bio
+            </label>
+            <textarea
+              id="bio"
+              rows={4}
+              className="rounded-xl border border-white/10 bg-slate-950/60 px-3 py-2.5 text-sm text-slate-100 placeholder:text-slate-500 focus:border-cyan-300/40 focus:outline-none focus:ring-2 focus:ring-cyan-300/20"
+              placeholder="Tell the community what you're building or learning…"
+              {...register('bio', { maxLength: { value: 300, message: 'Max 300 characters' } })}
             />
-
-            <div className="flex flex-col gap-1">
-              <label htmlFor="bio" className="text-sm font-medium text-brand-50/80">
-                Bio
-              </label>
-              <textarea
-                id="bio"
-                rows={3}
-                className="rounded-lg border border-brand-500/30 px-3 py-2 bg-brand-900/60 text-brand-50 placeholder-brand-50/40 focus:outline-none focus:ring-2 focus:ring-brand-500/40 transition-colors resize-none"
-                placeholder="Tell us about yourself..."
-                {...register('bio', { maxLength: { value: 300, message: 'Max 300 characters' } })}
-              />
-              {errors.bio && <p className="text-xs text-red-400">{errors.bio.message}</p>}
-            </div>
-
-            <FormButton type="submit" loading={isLoading}>
-              Save Changes
-            </FormButton>
-          </form>
-        </div>
-
-        {/* Game Stats */}
-        {user.profile && (
-          <div className="rounded-xl border border-brand-500/20 bg-brand-900/60 p-4">
-            <h2 className="text-lg font-semibold text-white mb-3">Game Stats</h2>
-            <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 text-center">
-              {[
-                { label: 'Level', value: String(user.profile.level) },
-                { label: 'XP', value: String(user.profile.xp) },
-                { label: 'Coins', value: String(user.profile.coins) },
-                { label: 'Streak', value: `${String(user.profile.codingStreak)}d` },
-              ].map(({ label, value }) => (
-                <div
-                  key={label}
-                  className="rounded-lg border border-brand-500/10 bg-brand-900/40 p-3"
-                >
-                  <p className="text-xl font-bold text-white">{value}</p>
-                  <p className="text-xs text-brand-50/40 mt-0.5">{label}</p>
-                </div>
-              ))}
-            </div>
+            {errors.bio && <p className="text-xs text-rose-300">{errors.bio.message}</p>}
           </div>
-        )}
-      </div>
-    </div>
+
+          <FormButton type="submit" loading={isLoading}>
+            Save changes
+          </FormButton>
+        </form>
+      </GlassPanel>
+
+      {user.profile && (
+        <div className="grid gap-4 sm:grid-cols-2">
+          <StatTile label="Level" value={user.profile.level} accent="cyan" />
+          <StatTile label="XP" value={user.profile.xp.toLocaleString()} accent="violet" />
+          <StatTile label="Coins" value={user.profile.coins} accent="amber" />
+          <StatTile
+            label="Streak"
+            value={`${String(user.profile.codingStreak)}d`}
+            accent="emerald"
+          />
+        </div>
+      )}
+    </PlayerPageShell>
   );
 }

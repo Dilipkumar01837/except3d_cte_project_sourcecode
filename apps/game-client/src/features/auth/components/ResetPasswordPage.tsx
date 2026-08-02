@@ -103,8 +103,8 @@ export function ResetPasswordPage() {
           Reset Password
         </FormButton>
 
-        <p className="text-center text-sm text-brand-50/60">
-          <Link to="/login" className="text-brand-500 hover:underline">
+        <p className="text-center text-sm text-slate-400">
+          <Link to="/login" className="text-cyan-300 hover:text-cyan-200">
             Back to Sign In
           </Link>
         </p>

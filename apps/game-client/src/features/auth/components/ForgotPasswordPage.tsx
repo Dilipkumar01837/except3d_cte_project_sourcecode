@@ -40,12 +40,12 @@ export function ForgotPasswordPage() {
   if (sent) {
     return (
       <AuthCard title="Check Your Email" subtitle="We've sent a password reset link">
-        <p className="text-center text-sm text-brand-50/70">
+        <p className="text-center text-sm text-slate-400">
           If an account with that email exists, you will receive a password reset email within a few
           minutes.
         </p>
         <div className="mt-6 text-center">
-          <Link to="/login" className="text-brand-500 hover:underline text-sm">
+          <Link to="/login" className="text-cyan-300 hover:text-cyan-200 text-sm">
             Back to Sign In
           </Link>
         </div>
@@ -85,9 +85,9 @@ export function ForgotPasswordPage() {
           Send Reset Link
         </FormButton>
 
-        <p className="text-center text-sm text-brand-50/60">
+        <p className="text-center text-sm text-slate-400">
           Remember your password?{' '}
-          <Link to="/login" className="text-brand-500 hover:underline">
+          <Link to="/login" className="text-cyan-300 hover:text-cyan-200">
             Sign in
           </Link>
         </p>

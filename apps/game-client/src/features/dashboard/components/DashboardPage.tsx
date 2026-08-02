@@ -1,153 +1,196 @@
-import { useEffect } from 'react';
+import { motion } from 'framer-motion';
 import { Link } from 'react-router-dom';
 import { useAuthStore } from '@/features/auth/store/auth.store';
 import { DailyRewardWidget } from '@/features/daily-reward/components/DailyRewardWidget';
+import { PlayerPageShell } from '@/shared/components/layout/PlayerPageShell';
+import { ActionLink, GlassPanel, MetaRow, StatTile } from '@/shared/components/ui/player-ui';
 
-const RANK_COLORS: Record<string, string> = {
-  BEGINNER: 'text-gray-400',
-  NOVICE: 'text-green-400',
-  APPRENTICE: 'text-blue-400',
-  JOURNEYMAN: 'text-purple-400',
-  EXPERT: 'text-yellow-400',
-  MASTER: 'text-orange-400',
-  GRANDMASTER: 'text-red-400',
+const RANK_STYLES: Record<string, string> = {
+  BEGINNER: 'border-slate-500/30 bg-slate-500/10 text-slate-300',
+  NOVICE: 'border-emerald-400/30 bg-emerald-400/10 text-emerald-200',
+  APPRENTICE: 'border-cyan-400/30 bg-cyan-400/10 text-cyan-200',
+  JOURNEYMAN: 'border-violet-400/30 bg-violet-400/10 text-violet-200',
+  EXPERT: 'border-amber-400/30 bg-amber-400/10 text-amber-200',
+  MASTER: 'border-orange-400/30 bg-orange-400/10 text-orange-200',
+  GRANDMASTER: 'border-rose-400/30 bg-rose-400/10 text-rose-200',
 };
 
-const WORLD_LABELS: Record<string, string> = {
-  PYTHON_FOREST: '🌿 Python Forest',
-  JAVASCRIPT_JUNGLE: '🌴 JavaScript Jungle',
-  TYPESCRIPT_TUNDRA: '❄️ TypeScript Tundra',
-  RUST_REALM: '⚙️ Rust Realm',
-  GO_GALAXY: '🚀 Go Galaxy',
+const WORLD_LABELS: Record<string, { label: string; emoji: string }> = {
+  PYTHON_FOREST: { label: 'Python Forest', emoji: '🌿' },
+  JAVASCRIPT_JUNGLE: { label: 'JavaScript Jungle', emoji: '🌴' },
+  TYPESCRIPT_TUNDRA: { label: 'TypeScript Tundra', emoji: '❄️' },
+  RUST_REALM: { label: 'Rust Realm', emoji: '⚙️' },
+  GO_GALAXY: { label: 'Go Galaxy', emoji: '🚀' },
 };
-
-function StatCard({ label, value, sub }: { label: string; value: string | number; sub?: string }) {
-  return (
-    <div className="rounded-xl border border-brand-500/20 bg-brand-900/60 p-4">
-      <p className="text-xs text-brand-50/50 uppercase tracking-wider">{label}</p>
-      <p className="mt-1 text-2xl font-bold text-white">{value}</p>
-      {sub && <p className="text-xs text-brand-50/40 mt-0.5">{sub}</p>}
-    </div>
-  );
-}
 
 export function DashboardPage() {
-  const { user, loadUser } = useAuthStore();
-
-  useEffect(() => {
-    void loadUser();
-  }, [loadUser]);
+  const { user } = useAuthStore();
 
   if (!user) return null;
 
   const profile = user.profile;
   const xpForNextLevel = profile ? profile.level * 100 : 100;
-  const xpProgress = profile ? Math.round((profile.xp / xpForNextLevel) * 100) : 0;
-  const rankColor = RANK_COLORS[profile?.rank ?? 'BEGINNER'] ?? 'text-gray-400';
+  const xpProgress = profile ? Math.min(Math.round((profile.xp / xpForNextLevel) * 100), 100) : 0;
+  const rank = profile?.rank ?? 'BEGINNER';
+  const rankStyle = RANK_STYLES[rank] ?? RANK_STYLES['BEGINNER'];
+  const world = WORLD_LABELS[profile?.currentWorld ?? ''] ?? {
+    label: profile?.currentWorld ?? 'Unknown',
+    emoji: '🌍',
+  };
+  const displayName = profile?.displayName ?? user.username;
+  const initials = displayName.slice(0, 1).toUpperCase();
 
   return (
-    <div className="min-h-screen bg-brand-900 px-4 py-8">
-      <div className="mx-auto max-w-4xl space-y-6">
-        {/* Header */}
-        <div className="flex items-center justify-between">
+    <PlayerPageShell
+      eyebrow="Command center"
+      title={`Welcome back, ${displayName}`}
+      subtitle="Track your progress, claim daily rewards, and jump back into your next escape mission."
+      actions={
+        <>
+          <ActionLink to="/challenges">Play missions</ActionLink>
+          <ActionLink to="/profile" variant="secondary">
+            Edit profile
+          </ActionLink>
+        </>
+      }
+      maxWidth="7xl"
+    >
+      <motion.div
+        initial={{ opacity: 0, y: 12 }}
+        animate={{ opacity: 1, y: 0 }}
+        className="grid gap-6 lg:grid-cols-[1.4fr_1fr]"
+      >
+        <GlassPanel className="relative overflow-hidden p-6 sm:p-8">
+          <div
+            aria-hidden="true"
+            className="pointer-events-none absolute -right-16 -top-16 h-48 w-48 rounded-full bg-cyan-400/10 blur-2xl"
+          />
+          <div className="relative flex flex-col gap-6 sm:flex-row sm:items-center">
+            <div className="grid h-20 w-20 shrink-0 place-items-center rounded-2xl bg-gradient-to-br from-cyan-300 to-violet-400 text-2xl font-black text-slate-950 shadow-lg shadow-cyan-950/30">
+              {initials}
+            </div>
+            <div className="min-w-0 flex-1">
+              <div className="flex flex-wrap items-center gap-2">
+                <p className="text-sm text-slate-400">@{user.username}</p>
+                <span
+                  className={`rounded-full border px-2.5 py-0.5 text-[11px] font-bold uppercase tracking-wide ${rankStyle}`}
+                >
+                  {rank.replace('_', ' ')}
+                </span>
+              </div>
+              <p className="mt-2 text-2xl font-bold text-white">
+                Level {profile?.level ?? 1}{' '}
+                <span className="text-base font-medium text-slate-400">· escape runner</span>
+              </p>
+              {profile && (
+                <div className="mt-5">
+                  <div className="mb-2 flex justify-between text-xs font-medium text-slate-400">
+                    <span>Progress to level {profile.level + 1}</span>
+                    <span className="text-slate-200">
+                      {profile.xp.toLocaleString()} / {xpForNextLevel.toLocaleString()} XP
+                    </span>
+                  </div>
+                  <div className="h-2.5 overflow-hidden rounded-full bg-slate-950/80 ring-1 ring-white/10">
+                    <div
+                      className="h-full rounded-full bg-gradient-to-r from-cyan-300 via-cyan-400 to-violet-400 transition-all duration-700"
+                      style={{ width: `${String(xpProgress)}%` }}
+                    />
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        </GlassPanel>
+
+        <GlassPanel className="flex flex-col justify-between p-6">
           <div>
-            <h1 className="text-2xl font-bold text-white">
-              Hey, {profile?.displayName ?? user.username}! 👋
-            </h1>
-            <p className="text-sm text-brand-50/50">
-              @{user.username} · <span className={rankColor}>{profile?.rank ?? 'BEGINNER'}</span>
+            <p className="text-xs font-bold uppercase tracking-[0.18em] text-violet-300">
+              Current world
+            </p>
+            <p className="mt-3 text-3xl">{world.emoji}</p>
+            <p className="mt-2 text-xl font-bold text-white">{world.label}</p>
+            <p className="mt-2 text-sm text-slate-400">
+              Your active storyline and recommended missions live here.
             </p>
           </div>
-          <div className="flex gap-2">
+          <Link
+            to="/explore"
+            className="mt-6 inline-flex items-center gap-2 text-sm font-bold text-cyan-200 transition hover:text-cyan-100"
+          >
+            Browse worlds <span aria-hidden="true">→</span>
+          </Link>
+        </GlassPanel>
+      </motion.div>
+
+      {profile && (
+        <motion.div
+          initial={{ opacity: 0, y: 12 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.05 }}
+          className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4"
+        >
+          <StatTile label="Level" value={profile.level} accent="cyan" />
+          <StatTile label="Total XP" value={profile.xp.toLocaleString()} accent="violet" />
+          <StatTile
+            label="Coins"
+            value={profile.coins.toLocaleString()}
+            hint="Spend in future worlds"
+            accent="amber"
+          />
+          <StatTile
+            label="Streak"
+            value={`${String(profile.codingStreak)}d`}
+            hint="Daily coding streak"
+            accent="emerald"
+          />
+        </motion.div>
+      )}
+
+      <div className="grid gap-6 lg:grid-cols-[1fr_1fr]">
+        <DailyRewardWidget />
+        <GlassPanel>
+          <p className="text-xs font-bold uppercase tracking-[0.18em] text-cyan-300">
+            Quick actions
+          </p>
+          <div className="mt-4 grid gap-3 sm:grid-cols-2">
             <Link
               to="/challenges"
-              className="rounded-lg bg-brand-500 px-4 py-2 text-sm font-semibold text-white hover:bg-brand-500/90 transition-colors"
+              className="rounded-xl border border-white/10 bg-white/[0.03] p-4 transition hover:border-cyan-300/30 hover:bg-white/[0.06]"
             >
-              Play challenges
-            </Link>
-            <Link
-              to="/profile"
-              className="rounded-lg border border-brand-500/30 px-4 py-2 text-sm text-brand-50/80 hover:bg-brand-500/10 transition-colors"
-            >
-              Profile
+              <p className="font-bold text-white">Continue coding</p>
+              <p className="mt-1 text-xs text-slate-400">Pick up where you left off</p>
             </Link>
             <Link
               to="/settings"
-              className="rounded-lg border border-brand-500/30 px-4 py-2 text-sm text-brand-50/80 hover:bg-brand-500/10 transition-colors"
+              className="rounded-xl border border-white/10 bg-white/[0.03] p-4 transition hover:border-violet-300/30 hover:bg-white/[0.06]"
             >
-              Settings
+              <p className="font-bold text-white">Account settings</p>
+              <p className="mt-1 text-xs text-slate-400">Security and preferences</p>
             </Link>
           </div>
-        </div>
-
-        {/* Stats Grid */}
-        {profile && (
-          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-            <StatCard label="Level" value={profile.level} />
-            <StatCard label="Total XP" value={profile.xp.toLocaleString()} />
-            <StatCard label="Coins" value={`🪙 ${String(profile.coins)}`} />
-            <StatCard label="Streak" value={`🔥 ${String(profile.codingStreak)}`} sub="days" />
-          </div>
-        )}
-
-        {/* XP Progress */}
-        {profile && (
-          <div className="rounded-xl border border-brand-500/20 bg-brand-900/60 p-4">
-            <div className="flex justify-between text-sm mb-2">
-              <span className="text-brand-50/60">XP to Level {String(profile.level + 1)}</span>
-              <span className="text-brand-50/80 font-medium">
-                {String(profile.xp)} / {String(xpForNextLevel)}
-              </span>
-            </div>
-            <div className="h-2 rounded-full bg-brand-900/80 overflow-hidden">
-              <div
-                className="h-full bg-brand-500 rounded-full transition-all duration-500"
-                style={{ width: `${String(Math.min(xpProgress, 100))}%` }}
-              />
-            </div>
-          </div>
-        )}
-
-        {/* Current World */}
-        {profile && (
-          <div className="rounded-xl border border-brand-500/20 bg-brand-900/60 p-4">
-            <p className="text-xs text-brand-50/50 uppercase tracking-wider mb-2">Current World</p>
-            <p className="text-lg font-semibold text-white">
-              {WORLD_LABELS[profile.currentWorld] ?? profile.currentWorld}
-            </p>
-          </div>
-        )}
-
-        {/* Daily Reward */}
-        <DailyRewardWidget />
-
-        {/* Account Info */}
-        <div className="rounded-xl border border-brand-500/20 bg-brand-900/60 p-4">
-          <p className="text-xs text-brand-50/50 uppercase tracking-wider mb-3">Account</p>
-          <div className="space-y-2 text-sm">
-            <div className="flex justify-between">
-              <span className="text-brand-50/50">Email</span>
-              <span className="text-brand-50/80">{user.email}</span>
-            </div>
-            <div className="flex justify-between">
-              <span className="text-brand-50/50">Email Verified</span>
-              <span className={user.emailVerified ? 'text-green-400' : 'text-yellow-400'}>
-                {user.emailVerified ? '✓ Verified' : '⚠ Not Verified'}
-              </span>
-            </div>
-            <div className="flex justify-between">
-              <span className="text-brand-50/50">Auth Provider</span>
-              <span className="text-brand-50/80">{user.authProvider}</span>
-            </div>
-            <div className="flex justify-between">
-              <span className="text-brand-50/50">Member Since</span>
-              <span className="text-brand-50/80">
-                {new Date(user.createdAt).toLocaleDateString()}
-              </span>
-            </div>
-          </div>
-        </div>
+        </GlassPanel>
       </div>
-    </div>
+
+      <GlassPanel>
+        <p className="text-xs font-bold uppercase tracking-[0.18em] text-slate-500">
+          Account snapshot
+        </p>
+        <div className="mt-2">
+          <MetaRow label="Email" value={user.email} />
+          <MetaRow
+            label="Verification"
+            value={
+              user.emailVerified ? (
+                <span className="text-emerald-300">Verified</span>
+              ) : (
+                <span className="text-amber-300">Pending</span>
+              )
+            }
+          />
+          <MetaRow label="Sign-in method" value={user.authProvider} />
+          <MetaRow label="Member since" value={new Date(user.createdAt).toLocaleDateString()} />
+        </div>
+      </GlassPanel>
+    </PlayerPageShell>
   );
 }

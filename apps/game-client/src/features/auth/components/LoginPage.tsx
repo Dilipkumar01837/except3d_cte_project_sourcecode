@@ -64,7 +64,7 @@ export function LoginPage() {
         />
 
         <div className="flex justify-end">
-          <Link to="/forgot-password" className="text-xs text-brand-500 hover:underline">
+          <Link to="/forgot-password" className="text-xs text-cyan-300 hover:text-cyan-200">
             Forgot password?
           </Link>
         </div>
@@ -73,9 +73,9 @@ export function LoginPage() {
           Sign In
         </FormButton>
 
-        <p className="text-center text-sm text-brand-50/60">
+        <p className="text-center text-sm text-slate-400">
           Don&apos;t have an account?{' '}
-          <Link to="/register" className="text-brand-500 hover:underline">
+          <Link to="/register" className="text-cyan-300 hover:text-cyan-200">
             Sign up
           </Link>
         </p>

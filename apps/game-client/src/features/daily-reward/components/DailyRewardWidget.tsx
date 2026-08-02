@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { dailyRewardApi } from '../lib/daily-reward-api';
+import { GlassPanel } from '@/shared/components/ui/player-ui';
 
 interface DailyRewardStatus {
   canClaim: boolean;
@@ -44,23 +45,31 @@ export function DailyRewardWidget() {
   if (!status) return null;
 
   return (
-    <div className="rounded-xl border border-brand-500/20 bg-brand-900/60 p-4">
-      <div className="flex items-center justify-between">
-        <div>
-          <p className="text-xs text-brand-50/50 uppercase tracking-wider">Daily Reward</p>
-          <p className="mt-1 text-sm font-semibold text-white">
-            🔥 {String(status.streak)} day streak
+    <GlassPanel className="flex h-full flex-col justify-between">
+      <div>
+        <p className="text-xs font-bold uppercase tracking-[0.18em] text-amber-300">Daily reward</p>
+        <p className="mt-3 text-3xl font-black text-white">{status.streak}</p>
+        <p className="text-sm text-slate-400">day streak — keep the momentum going</p>
+        {status.nextReward && (
+          <p className="mt-3 text-sm text-slate-300">
+            Next claim:{' '}
+            <span className="font-semibold text-cyan-200">
+              +{String(status.nextReward.xpAmount)} XP
+            </span>
+            {' · '}
+            <span className="font-semibold text-amber-200">
+              +{String(status.nextReward.coinAmount)} coins
+            </span>
           </p>
-          {status.nextReward && (
-            <p className="text-xs text-brand-50/40 mt-0.5">
-              +{String(status.nextReward.xpAmount)} XP · +{String(status.nextReward.coinAmount)} 🪙
-            </p>
-          )}
-        </div>
+        )}
+      </div>
+      <div className="mt-6">
         {claimed ? (
-          <div className="text-right">
-            <p className="text-xs font-bold text-emerald-400">Claimed!</p>
-            <p className="text-xs text-brand-50/50">+{String(claimed.xpEarned)} XP</p>
+          <div className="rounded-xl border border-emerald-400/25 bg-emerald-400/10 px-4 py-3">
+            <p className="text-sm font-bold text-emerald-200">Reward claimed!</p>
+            <p className="mt-1 text-xs text-emerald-100/80">
+              +{String(claimed.xpEarned)} XP · +{String(claimed.coinsEarned)} coins
+            </p>
           </div>
         ) : status.canClaim ? (
           <button
@@ -69,14 +78,16 @@ export function DailyRewardWidget() {
             onClick={() => {
               void handleClaim();
             }}
-            className="rounded-lg bg-brand-500 px-3 py-2 text-xs font-bold text-white hover:bg-brand-500/90 transition disabled:opacity-50"
+            className="w-full rounded-xl bg-gradient-to-r from-amber-300 to-orange-400 px-4 py-3 text-sm font-black text-slate-950 transition hover:brightness-105 disabled:opacity-50"
           >
-            {claiming ? '…' : 'Claim'}
+            {claiming ? 'Claiming…' : "Claim today's reward"}
           </button>
         ) : (
-          <p className="text-xs text-brand-50/40">Come back tomorrow</p>
+          <p className="rounded-xl border border-white/10 bg-white/[0.03] px-4 py-3 text-center text-sm text-slate-400">
+            Already claimed — see you tomorrow
+          </p>
         )}
       </div>
-    </div>
+    </GlassPanel>
   );
 }
