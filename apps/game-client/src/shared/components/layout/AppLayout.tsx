@@ -10,6 +10,9 @@ const publicLinks = [
 ];
 const privateLinks = [
   { to: '/dashboard', label: 'Dashboard' },
+  { to: '/worlds', label: 'Worlds' },
+  { to: '/leaderboard', label: 'Leaderboard' },
+  { to: '/duels', label: 'Duels' },
   { to: '/explore', label: 'Explore' },
   { to: '/challenges', label: 'Challenges' },
 ];

@@ -11,6 +11,7 @@ import { playerRouter } from '../modules/player/index.js';
 import { challengeRouter } from '../modules/challenges/index.js';
 import { adminRouter } from '../modules/admin/index.js';
 import { dailyRewardRouter } from '../modules/daily-reward/index.js';
+import { duelRouter } from '../modules/duels/index.js';
 import { errorHandler } from '../shared/middleware/error-handler.js';
 import { generalRateLimit } from '../shared/middleware/rate-limit.js';
 import { requestLogger } from '../shared/middleware/request-logger.js';
@@ -52,6 +53,7 @@ export function createApp(): ReturnType<typeof express> {
   app.use(`${API_BASE_PATH}/challenges`, challengeRouter);
   app.use(`${API_BASE_PATH}/admin`, adminRouter);
   app.use(`${API_BASE_PATH}/player/daily-reward`, dailyRewardRouter);
+  app.use(`${API_BASE_PATH}/duels`, duelRouter);
 
   app.use(errorHandler);
 

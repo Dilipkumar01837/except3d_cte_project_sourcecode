@@ -35,6 +35,26 @@ export interface Submission {
   createdAt: string;
   completedAt: string | null;
 }
+export interface TestResult {
+  testCaseId: string;
+  passed: boolean;
+  executionTimeMs?: number | null;
+  memoryUsedKb?: number | null;
+  output?: string | null;
+}
+export interface RunResult {
+  status: string;
+  executionTimeMs?: number | null;
+  memoryUsedKb?: number | null;
+  compilerOutput?: string | null;
+  runtimeOutput?: string | null;
+  results: TestResult[];
+}
+export interface SubmissionDetail extends Submission {
+  compilerOutput: string | null;
+  runtimeOutput: string | null;
+  results: Array<TestResult & { testCase: { isHidden: boolean } }>;
+}
 
 function dataOf<T>(response: { data: { data: T } }): T {
   return response.data.data;
@@ -58,14 +78,40 @@ export const challengeApi = {
       }),
     ).submission;
   },
+  async run(slug: string, language: Language, sourceCode: string): Promise<RunResult> {
+    return dataOf<{ run: RunResult }>(
+      await apiClient.post(`/challenges/${encodeURIComponent(slug)}/runs`, {
+        language,
+        sourceCode,
+      }),
+    ).run;
+  },
   async submissions(slug: string): Promise<Submission[]> {
     return dataOf<{ submissions: Submission[] }>(
       await apiClient.get(`/challenges/${encodeURIComponent(slug)}/submissions`),
     ).submissions;
   },
-  async hint(slug: string, level: number): Promise<{ content: string; xpPenalty: number }> {
-    return dataOf<{ hint: { content: string; xpPenalty: number } }>(
+  async submissionDetails(slug: string, submissionId: string): Promise<SubmissionDetail> {
+    return dataOf<{ submission: SubmissionDetail }>(
+      await apiClient.get(
+        `/challenges/${encodeURIComponent(slug)}/submissions/${encodeURIComponent(submissionId)}`,
+      ),
+    ).submission;
+  },
+  async hint(
+    slug: string,
+    level: number,
+  ): Promise<{ content: string; xpPenalty: number; alreadyRevealed: boolean }> {
+    return dataOf<{ hint: { content: string; xpPenalty: number; alreadyRevealed: boolean } }>(
       await apiClient.get(`/challenges/${encodeURIComponent(slug)}/hints/${String(level)}`),
+    ).hint;
+  },
+  async aiHint(slug: string, language: Language, sourceCode: string): Promise<string> {
+    return dataOf<{ hint: string }>(
+      await apiClient.post(`/challenges/${encodeURIComponent(slug)}/hints/ai`, {
+        language,
+        sourceCode,
+      }),
     ).hint;
   },
 };

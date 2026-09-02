@@ -1,6 +1,6 @@
 # Code to Escape
 
-> **Gamified real-time programming learning platform** — a browser-based adventure where you write real code to solve puzzles, earn XP, and escape through five themed worlds.
+> **Gamified programming learning platform** — a browser-based application where learners solve coding challenges, earn XP, progress through worlds, compare rankings, and compete in duel lobbies.
 
 [![CI](https://github.com/dilipkumardilip/code-to-escape/actions/workflows/ci.yml/badge.svg)](https://github.com/dilipkumardilip/code-to-escape/actions)
 
@@ -8,7 +8,7 @@
 
 ## What is it?
 
-Code to Escape turns programming practice into a game. Players write Python, JavaScript, TypeScript, Go, Rust, C++, or Java to unlock pathways, outsmart puzzles, and progress through worlds. Every solved challenge earns XP and coins; every daily login extends a streak. An isolated Docker sandbox executes code safely with per-request CPU, memory, and time limits.
+Code to Escape turns programming practice into a game. Players write Python, JavaScript, TypeScript, Go, Rust, C++, or Java to solve published challenges. Accepted submissions award XP and coins, update progress, and feed daily streaks, achievements, and leaderboards. An isolated Docker sandbox executes code with per-request CPU, memory, and time limits.
 
 ---
 
@@ -18,7 +18,7 @@ Code to Escape turns programming practice into a game. Players write Python, Jav
 apps/
   game-client/          React 19 + Vite — player-facing SPA (port 5173)
   admin-dashboard/      React 19 + Vite — admin SPA (port 5174)
-  server/               Express API + Socket.IO (port 3001)
+  server/               Express API + Socket.IO (port 3000)
   code-runner/          Isolated code execution service (port 3002)
   e2e/                  Playwright end-to-end tests
 packages/
@@ -29,7 +29,7 @@ packages/
   game-engine/          Game logic (XP, levelling)
   config/               Shared ESLint + TypeScript configs
 database/
-  prisma/               Schema (17 models) + 6 migrations
+  prisma/               Schema and database migrations
 docker/
   code-runner/          Sandbox + runner Dockerfiles
 docs/
@@ -70,7 +70,7 @@ pnpm db:migrate
 
 ### 4 — Start all dev servers
 
-Open **three terminals**:
+Open separate terminals for the API, worker, game client, and admin dashboard:
 
 ```bash
 # Terminal 1 — API server
@@ -93,9 +93,9 @@ pnpm dev
 | --------------- | --------------------------------------------- |
 | Game client     | http://localhost:5173                         |
 | Admin dashboard | http://localhost:5174                         |
-| API             | http://localhost:3001/api/v1                  |
-| Health check    | http://localhost:3001/api/v1/health           |
-| Readiness       | http://localhost:3001/api/v1/health/readiness |
+| API             | http://localhost:3000/api/v1                  |
+| Health check    | http://localhost:3000/api/v1/health           |
+| Readiness       | http://localhost:3000/api/v1/health/readiness |
 
 ### 5 — (Optional) Start execution worker
 
@@ -109,16 +109,16 @@ pnpm --filter @code-to-escape/server worker
 
 ## Scripts
 
-| Script             | Description                              |
-| ------------------ | ---------------------------------------- |
-| `pnpm dev`         | Start all apps in development mode       |
-| `pnpm build`       | Build all packages and apps              |
-| `pnpm lint`        | Run ESLint across the monorepo           |
-| `pnpm typecheck`   | TypeScript type-check all packages       |
-| `pnpm test`        | Run server unit tests (Vitest, 57 tests) |
-| `pnpm db:generate` | Generate Prisma client                   |
-| `pnpm db:migrate`  | Apply pending migrations                 |
-| `pnpm docker:up`   | Start PostgreSQL and Redis               |
+| Script                                      | Description                        |
+| ------------------------------------------- | ---------------------------------- |
+| `pnpm dev`                                  | Start all apps in development mode |
+| `pnpm build`                                | Build all packages and apps        |
+| `pnpm lint`                                 | Run ESLint across the monorepo     |
+| `pnpm typecheck`                            | TypeScript type-check all packages |
+| `pnpm --filter @code-to-escape/server test` | Run server tests with Vitest       |
+| `pnpm db:generate`                          | Generate Prisma client             |
+| `pnpm db:migrate`                           | Apply pending migrations           |
+| `pnpm docker:up`                            | Start PostgreSQL and Redis         |
 
 ---
 
@@ -133,6 +133,8 @@ JWT_SECRET=<any-long-random-string>
 REFRESH_TOKEN_SECRET=<different-long-random-string>
 CODE_RUNNER_URL=http://localhost:3002
 CODE_RUNNER_TOKEN=code-to-escape-dev-runner-token
+GROQ_API_KEY=<optional-groq-api-key>
+GROQ_MODEL=llama-3.3-70b-versatile
 ```
 
 All other variables have sensible defaults for development.
@@ -157,7 +159,7 @@ Full API reference: [`docs/API.md`](docs/API.md)
 
 ---
 
-## Features Implemented (Days 1–10)
+## Implemented Features
 
 ### Core Platform
 
@@ -166,6 +168,8 @@ Full API reference: [`docs/API.md`](docs/API.md)
 - **Leaderboard** — global + weekly Redis sorted sets, reconciled on startup
 - **Daily rewards** — 7-day rotating streak rewards (XP + coins)
 - **Notifications** — in-app real-time notifications via Socket.IO
+- **Worlds and levels** — published world map, level progress, challenge assignment, and next-world unlocking
+- **Duel lobby and arena** — create/join active matches, submit duel solutions, and record the first accepted winner
 
 ### Challenges & Execution
 
@@ -173,12 +177,14 @@ Full API reference: [`docs/API.md`](docs/API.md)
 - **Isolated sandbox** — Docker container: `--network none`, `--read-only`, `--cap-drop ALL`, per-request CPU/memory/time limits
 - **Execution pipeline** — HTTP API enqueues to Redis; worker dequeues, runs, saves results atomically
 - **Scoring** — accuracy × speed bonus × retry penalty; hidden test cases never sent to client
+- **AI hints** — optional Groq-powered hints based on the challenge, language, and current student code; authored hints remain available without Groq
 
 ### Progression
 
 - **Achievement engine** — 8 trigger types (FIRST_LOGIN, FIRST_CHALLENGE_SOLVED, CHALLENGES_SOLVED, XP_REACHED, LEVEL_REACHED, STREAK_REACHED, DAILY_REWARD_STREAK, PERFECT_SUBMISSION)
 - **XP formula** — `level = floor(sqrt(xp / 100)) + 1`
 - **Rank progression** — 7 ranks tied to level thresholds
+- **Level progression** — accepted assigned challenges update level stars, attempts, best time, world completion, and unlock state
 
 ### Admin
 
@@ -200,8 +206,8 @@ Full API reference: [`docs/API.md`](docs/API.md)
 ## Testing
 
 ```bash
-# Unit tests (57 tests — register, login, RBAC, challenges, submissions, password reset)
-pnpm test
+# Server tests (includes auth, RBAC, challenges, runner contracts, and duel coverage)
+pnpm --filter @code-to-escape/server test
 
 # E2E tests (requires running stack)
 pnpm test:e2e
@@ -219,6 +225,7 @@ pnpm test:e2e
 | Database      | PostgreSQL 16, Prisma ORM                                                           |
 | Cache / Queue | Redis 7, ioredis                                                                    |
 | Auth          | JWT (access + refresh rotation), bcrypt, OAuth 2.0                                  |
+| AI hints      | Groq chat completions API (optional)                                                |
 | Code runner   | Docker, custom sandbox image                                                        |
 | Monorepo      | pnpm workspaces, Turborepo                                                          |
 | Testing       | Vitest (unit), Playwright (E2E)                                                     |
@@ -230,4 +237,6 @@ pnpm test:e2e
 
 Private — graduation project.
 
-# except3d_cte_project_sourcecode
+## Current Scope
+
+The current implementation is a browser-based gamified learning prototype. It does not include a native React Native application, 3D escape-room scenes, friends or matchmaking, or research measurements proving learning-outcome improvements. Duel mode currently records the first accepted solution as the winner; detailed timed score comparison is not part of the current API.

@@ -24,6 +24,7 @@ export async function executeInSandbox(
   const payload = JSON.stringify({ ...request, input });
   const args = [
     'run',
+    '-i',
     '--rm',
     '--network',
     'none',

@@ -32,7 +32,7 @@ export function DashboardPage() {
   const xpForNextLevel = profile ? profile.level * 100 : 100;
   const xpProgress = profile ? Math.min(Math.round((profile.xp / xpForNextLevel) * 100), 100) : 0;
   const rank = profile?.rank ?? 'BEGINNER';
-  const rankStyle = RANK_STYLES[rank] ?? RANK_STYLES['BEGINNER'];
+  const rankStyle = RANK_STYLES[rank] ?? RANK_STYLES['BEGINNER'] ?? 'border-slate-500/30';
   const world = WORLD_LABELS[profile?.currentWorld ?? ''] ?? {
     label: profile?.currentWorld ?? 'Unknown',
     emoji: '🌍',
@@ -114,7 +114,7 @@ export function DashboardPage() {
             </p>
           </div>
           <Link
-            to="/explore"
+            to="/worlds"
             className="mt-6 inline-flex items-center gap-2 text-sm font-bold text-cyan-200 transition hover:text-cyan-100"
           >
             Browse worlds <span aria-hidden="true">→</span>
@@ -159,6 +159,20 @@ export function DashboardPage() {
             >
               <p className="font-bold text-white">Continue coding</p>
               <p className="mt-1 text-xs text-slate-400">Pick up where you left off</p>
+            </Link>
+            <Link
+              to="/leaderboard"
+              className="rounded-xl border border-white/10 bg-white/[0.03] p-4 transition hover:border-amber-300/30 hover:bg-white/[0.06]"
+            >
+              <p className="font-bold text-white">View leaderboard</p>
+              <p className="mt-1 text-xs text-slate-400">Compare your escape score</p>
+            </Link>
+            <Link
+              to="/duels"
+              className="rounded-xl border border-white/10 bg-white/[0.03] p-4 transition hover:border-cyan-300/30 hover:bg-white/[0.06]"
+            >
+              <p className="font-bold text-white">Enter duel lobby</p>
+              <p className="mt-1 text-xs text-slate-400">Compete with another runner</p>
             </Link>
             <Link
               to="/settings"

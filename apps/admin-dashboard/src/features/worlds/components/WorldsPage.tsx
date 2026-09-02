@@ -1,11 +1,18 @@
 import { useEffect, useState } from 'react';
-import { adminApi, type AdminWorld, type AdminLevel } from '@/shared/lib/admin-api';
+import {
+  adminApi,
+  type AdminChallenge,
+  type AdminWorld,
+  type AdminLevel,
+} from '@/shared/lib/admin-api';
 
 export function WorldsPage() {
   const [worlds, setWorlds] = useState<AdminWorld[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [expanded, setExpanded] = useState<string | null>(null);
+  const [challenges, setChallenges] = useState<AdminChallenge[]>([]);
+  const [savingLevelId, setSavingLevelId] = useState<string | null>(null);
 
   const load = () => {
     setLoading(true);
@@ -24,7 +31,29 @@ export function WorldsPage() {
 
   useEffect(() => {
     load();
+    adminApi
+      .listChallenges({ page: 1, limit: 100 })
+      .then(({ challenges: items }) => {
+        setChallenges(items);
+      })
+      .catch(() => {
+        setError('Failed to load challenges for level assignment.');
+      });
   }, []);
+
+  const assignChallenge = async (worldId: string, level: AdminLevel, challengeId: string) => {
+    setSavingLevelId(level.id);
+    try {
+      await adminApi.updateLevel(worldId, level.id, {
+        challengeId: challengeId || null,
+      });
+      load();
+    } catch {
+      setError('Failed to assign the challenge.');
+    } finally {
+      setSavingLevelId(null);
+    }
+  };
 
   const handleCreateWorld = async () => {
     const name = window.prompt('World name:');
@@ -207,6 +236,22 @@ export function WorldsPage() {
                             <span className="text-xs text-amber-300">
                               +{String(level.xpReward)} XP
                             </span>
+                            <select
+                              aria-label={`Challenge for level ${String(level.number)}`}
+                              value={level.challengeId ?? ''}
+                              disabled={savingLevelId === level.id}
+                              onChange={(event) => {
+                                void assignChallenge(world.id, level, event.target.value);
+                              }}
+                              className="max-w-52 rounded border border-slate-700 bg-slate-900 px-2 py-1 text-xs text-slate-300"
+                            >
+                              <option value="">No challenge assigned</option>
+                              {challenges.map((challenge) => (
+                                <option key={challenge.id} value={challenge.id}>
+                                  {challenge.title}
+                                </option>
+                              ))}
+                            </select>
                             <button
                               type="button"
                               onClick={() => {

@@ -12,6 +12,11 @@ import { ProfilePage } from '@/features/profile/components/ProfilePage';
 import { SettingsPage } from '@/features/settings/components/SettingsPage';
 import { ChallengeListPage } from '@/features/challenges/components/ChallengeListPage';
 import { ChallengePlayerPage } from '@/features/challenges/components/ChallengePlayerPage';
+import { WorldsPage } from '@/features/worlds/components/WorldsPage';
+import { WorldLevelsPage } from '@/features/worlds/components/WorldLevelsPage';
+import { LeaderboardPage } from '@/features/leaderboard/components/LeaderboardPage';
+import { DuelLobbyPage } from '@/features/duels/components/DuelLobbyPage';
+import { DuelArenaPage } from '@/features/duels/components/DuelArenaPage';
 
 export function AppRouter() {
   return (
@@ -60,6 +65,46 @@ export function AppRouter() {
         element={
           <ProtectedRoute>
             <ChallengeListPage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/worlds"
+        element={
+          <ProtectedRoute>
+            <WorldsPage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/worlds/:worldId"
+        element={
+          <ProtectedRoute>
+            <WorldLevelsPage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/leaderboard"
+        element={
+          <ProtectedRoute>
+            <LeaderboardPage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/duels"
+        element={
+          <ProtectedRoute>
+            <DuelLobbyPage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/duels/:duelId"
+        element={
+          <ProtectedRoute>
+            <DuelArenaPage />
           </ProtectedRoute>
         }
       />

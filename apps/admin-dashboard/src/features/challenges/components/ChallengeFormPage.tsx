@@ -1,11 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
-import {
-  adminApi,
-  type AdminChallenge,
-  type ChallengeTestCase,
-  type ChallengeHint,
-} from '@/shared/lib/admin-api';
+import { adminApi, type AdminChallenge, type ChallengeTestCase } from '@/shared/lib/admin-api';
 
 const LANGUAGES = ['PYTHON', 'JAVA', 'JAVASCRIPT', 'TYPESCRIPT', 'CPP', 'GO', 'RUST'];
 const DIFFICULTIES = ['EASY', 'MEDIUM', 'HARD'];
@@ -23,6 +18,51 @@ function generateSlug(title: string): string {
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, '-')
     .replace(/^-|-$/g, '');
+}
+
+interface TestCaseDraft {
+  id: string;
+  input: string;
+  expectedOutput: string;
+  explanation: string;
+  isHidden: boolean;
+  weight: number;
+  sortOrder: number;
+  isNew: boolean;
+}
+
+interface HintDraft {
+  id: string;
+  level: number;
+  content: string;
+  xpPenalty: number;
+  isNew: boolean;
+}
+
+function toTestCaseDraft(tc: ChallengeTestCase): TestCaseDraft {
+  return {
+    id: tc.id,
+    input: tc.input,
+    expectedOutput: tc.expectedOutput,
+    explanation: tc.explanation ?? '',
+    isHidden: tc.isHidden,
+    weight: tc.weight,
+    sortOrder: tc.sortOrder,
+    isNew: false,
+  };
+}
+
+function emptyTestCaseDraft(sortOrder: number): TestCaseDraft {
+  return {
+    id: `new-tc-${String(Date.now())}`,
+    input: '',
+    expectedOutput: '',
+    explanation: '',
+    isHidden: false,
+    weight: 1,
+    sortOrder,
+    isNew: true,
+  };
 }
 
 export function ChallengeFormPage() {
@@ -45,10 +85,12 @@ export function ChallengeFormPage() {
     isPublished: false,
     starterCode: {},
   });
-  const [testCases, setTestCases] = useState<ChallengeTestCase[]>([]);
-  const [hints, setHints] = useState<ChallengeHint[]>([]);
+  const [testCases, setTestCases] = useState<TestCaseDraft[]>([]);
+  const [hints, setHints] = useState<HintDraft[]>([]);
   const [loading, setLoading] = useState(isEdit);
   const [saving, setSaving] = useState(false);
+  const [savingTestCaseId, setSavingTestCaseId] = useState('');
+  const [savingHintId, setSavingHintId] = useState('');
   const [error, setError] = useState('');
 
   useEffect(() => {
@@ -57,8 +99,8 @@ export function ChallengeFormPage() {
       .getChallenge(id)
       .then(({ challenge }) => {
         setForm(challenge);
-        setTestCases(challenge.testCases ?? []);
-        setHints(challenge.hints ?? []);
+        setTestCases((challenge.testCases ?? []).map(toTestCaseDraft));
+        setHints((challenge.hints ?? []).map((hint) => ({ ...hint, isNew: false })));
       })
       .catch(() => {
         setError('Failed to load challenge.');
@@ -105,64 +147,134 @@ export function ChallengeFormPage() {
   };
 
   // Test case management
-  const handleAddTestCase = async () => {
-    if (!isEdit || !id) {
-      alert('Save the challenge first.');
+  const addTestCaseDraft = () => {
+    const nextSort = testCases.reduce((max, tc) => Math.max(max, tc.sortOrder), -1) + 1;
+    setTestCases((prev) => [...prev, emptyTestCaseDraft(nextSort)]);
+  };
+
+  const patchTestCase = (draftId: string, patch: Partial<TestCaseDraft>) => {
+    setTestCases((prev) => prev.map((tc) => (tc.id === draftId ? { ...tc, ...patch } : tc)));
+  };
+
+  const saveTestCase = async (draft: TestCaseDraft) => {
+    if (!id) return;
+    if (!draft.expectedOutput.trim()) {
+      alert('Test case requires an expected output.');
       return;
     }
-    const input = window.prompt('Input:') ?? '';
-    const expectedOutput = window.prompt('Expected output:') ?? '';
-    if (!expectedOutput) return;
-    const hidden = window.confirm('Is this a hidden test case?');
+    setSavingTestCaseId(draft.id);
     try {
-      const { testCase } = await adminApi.addTestCase(id, {
-        input,
-        expectedOutput,
-        isHidden: hidden,
-        weight: 1,
-        sortOrder: testCases.length,
-      });
-      setTestCases((prev) => [...prev, testCase]);
+      if (draft.isNew) {
+        const { testCase } = await adminApi.addTestCase(id, {
+          input: draft.input,
+          expectedOutput: draft.expectedOutput,
+          explanation: draft.explanation,
+          isHidden: draft.isHidden,
+          weight: draft.weight,
+          sortOrder: draft.sortOrder,
+        });
+        setTestCases((prev) =>
+          prev.map((tc) => (tc.id === draft.id ? toTestCaseDraft(testCase) : tc)),
+        );
+      } else {
+        const { testCase } = await adminApi.updateTestCase(id, draft.id, {
+          input: draft.input,
+          expectedOutput: draft.expectedOutput,
+          explanation: draft.explanation,
+          isHidden: draft.isHidden,
+          weight: draft.weight,
+          sortOrder: draft.sortOrder,
+        });
+        setTestCases((prev) =>
+          prev.map((tc) => (tc.id === draft.id ? toTestCaseDraft(testCase) : tc)),
+        );
+      }
     } catch {
-      alert('Failed to add test case.');
+      alert('Failed to save test case.');
+    } finally {
+      setSavingTestCaseId('');
     }
   };
 
-  const handleDeleteTestCase = async (tcId: string) => {
+  const deleteTestCase = async (draft: TestCaseDraft) => {
     if (!id || !window.confirm('Delete this test case?')) return;
-    try {
-      await adminApi.deleteTestCase(id, tcId);
-      setTestCases((prev) => prev.filter((tc) => tc.id !== tcId));
-    } catch {
-      alert('Failed to delete.');
-    }
-  };
-
-  const handleAddHint = async () => {
-    if (!isEdit || !id) {
-      alert('Save the challenge first.');
+    if (draft.isNew) {
+      setTestCases((prev) => prev.filter((tc) => tc.id !== draft.id));
       return;
     }
-    const content = window.prompt('Hint content:') ?? '';
-    if (!content) return;
-    const level = hints.length + 1;
     try {
-      const { hint } = await adminApi.addHint(id, { level, content, xpPenalty: 0 });
-      setHints((prev) => [...prev, hint]);
-    } catch {
-      alert('Failed to add hint.');
-    }
-  };
-
-  const handleDeleteHint = async (hintId: string) => {
-    if (!id || !window.confirm('Delete this hint?')) return;
-    try {
-      await adminApi.deleteHint(id, hintId);
-      setHints((prev) => prev.filter((h) => h.id !== hintId));
+      await adminApi.deleteTestCase(id, draft.id);
+      setTestCases((prev) => prev.filter((tc) => tc.id !== draft.id));
     } catch {
       alert('Failed to delete.');
     }
   };
+
+  // Hint management
+  const addHintDraft = () => {
+    const nextLevel = hints.reduce((max, h) => Math.max(max, h.level), 0) + 1;
+    setHints((prev) => [
+      ...prev,
+      {
+        id: `new-hint-${String(Date.now())}`,
+        level: nextLevel,
+        content: '',
+        xpPenalty: 0,
+        isNew: true,
+      },
+    ]);
+  };
+
+  const patchHint = (hintId: string, patch: Partial<HintDraft>) => {
+    setHints((prev) => prev.map((h) => (h.id === hintId ? { ...h, ...patch } : h)));
+  };
+
+  const saveHint = async (draft: HintDraft) => {
+    if (!id) return;
+    if (!draft.content.trim()) {
+      alert('Hint content cannot be empty.');
+      return;
+    }
+    setSavingHintId(draft.id);
+    try {
+      if (draft.isNew) {
+        const { hint } = await adminApi.addHint(id, {
+          level: draft.level,
+          content: draft.content,
+          xpPenalty: draft.xpPenalty,
+        });
+        setHints((prev) => prev.map((h) => (h.id === draft.id ? { ...hint, isNew: false } : h)));
+      } else {
+        const { hint } = await adminApi.updateHint(id, draft.id, {
+          level: draft.level,
+          content: draft.content,
+          xpPenalty: draft.xpPenalty,
+        });
+        setHints((prev) => prev.map((h) => (h.id === draft.id ? { ...hint, isNew: false } : h)));
+      }
+    } catch {
+      alert('Failed to save hint.');
+    } finally {
+      setSavingHintId('');
+    }
+  };
+
+  const deleteHint = async (draft: HintDraft) => {
+    if (!id || !window.confirm('Delete this hint?')) return;
+    if (draft.isNew) {
+      setHints((prev) => prev.filter((h) => h.id !== draft.id));
+      return;
+    }
+    try {
+      await adminApi.deleteHint(id, draft.id);
+      setHints((prev) => prev.filter((h) => h.id !== draft.id));
+    } catch {
+      alert('Failed to delete.');
+    }
+  };
+
+  const sectionClass = 'rounded-xl border border-slate-700/50 bg-slate-900 p-5 space-y-3';
+  const busy = savingTestCaseId !== '' || savingHintId !== '';
 
   if (loading)
     return (
@@ -368,52 +480,123 @@ export function ChallengeFormPage() {
 
       {/* Test Cases */}
       {isEdit && (
-        <div className="rounded-xl border border-slate-700/50 bg-slate-900 p-5 space-y-3">
+        <div className={sectionClass}>
           <div className="flex items-center justify-between">
             <h2 className="text-sm font-semibold text-white">
               Test Cases ({String(testCases.length)})
             </h2>
             <button
               type="button"
-              onClick={() => {
-                void handleAddTestCase();
-              }}
+              onClick={addTestCaseDraft}
               className="rounded-lg border border-slate-700 px-3 py-1 text-xs text-slate-300 hover:bg-slate-800"
             >
-              + Add
+              + Add test case
             </button>
           </div>
           {testCases.length === 0 ? (
             <p className="text-xs text-slate-500">No test cases yet.</p>
           ) : (
-            <div className="space-y-2">
-              {testCases.map((tc) => (
+            <div className="space-y-3">
+              {testCases.map((draft) => (
                 <div
-                  key={tc.id}
-                  className="flex items-center gap-3 rounded-lg border border-slate-700/50 bg-slate-800 px-3 py-2"
+                  key={draft.id}
+                  className="rounded-lg border border-slate-700/50 bg-slate-800 p-3 space-y-3"
                 >
-                  <div className="flex-1 min-w-0">
-                    <p className="text-xs font-mono text-slate-300 truncate">
-                      In: {tc.input || '(empty)'}
-                    </p>
-                    <p className="text-xs font-mono text-slate-400 truncate">
-                      Out: {tc.expectedOutput}
-                    </p>
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    <label className="block">
+                      <span className="label text-[11px]">Input</span>
+                      <textarea
+                        rows={2}
+                        value={draft.input}
+                        onChange={(e) => {
+                          patchTestCase(draft.id, { input: e.target.value });
+                        }}
+                        className="input font-mono text-xs resize-y"
+                        placeholder="stdin"
+                      />
+                    </label>
+                    <label className="block">
+                      <span className="label text-[11px]">Expected output</span>
+                      <textarea
+                        rows={2}
+                        value={draft.expectedOutput}
+                        onChange={(e) => {
+                          patchTestCase(draft.id, { expectedOutput: e.target.value });
+                        }}
+                        className="input font-mono text-xs resize-y"
+                        placeholder="stdout"
+                      />
+                    </label>
                   </div>
-                  <span
-                    className={`text-xs font-medium ${tc.isHidden ? 'text-amber-400' : 'text-slate-500'}`}
-                  >
-                    {tc.isHidden ? 'Hidden' : 'Visible'}
-                  </span>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      void handleDeleteTestCase(tc.id);
-                    }}
-                    className="text-xs text-rose-400 hover:text-rose-300"
-                  >
-                    ✕
-                  </button>
+                  <label className="block">
+                    <span className="label text-[11px]">Explanation (shown to players)</span>
+                    <input
+                      value={draft.explanation}
+                      onChange={(e) => {
+                        patchTestCase(draft.id, { explanation: e.target.value });
+                      }}
+                      className="input text-xs"
+                      placeholder="Optional explanation for the example"
+                    />
+                  </label>
+                  <div className="flex flex-wrap items-end gap-4">
+                    <label className="flex items-center gap-2 text-xs text-slate-300">
+                      <input
+                        type="checkbox"
+                        checked={draft.isHidden}
+                        onChange={(e) => {
+                          patchTestCase(draft.id, { isHidden: e.target.checked });
+                        }}
+                        className="accent-amber-400"
+                      />
+                      Hidden test
+                    </label>
+                    <label className="block">
+                      <span className="label text-[11px]">Sort order</span>
+                      <input
+                        type="number"
+                        min={0}
+                        value={draft.sortOrder}
+                        onChange={(e) => {
+                          patchTestCase(draft.id, { sortOrder: Number(e.target.value) });
+                        }}
+                        className="input w-24 text-xs"
+                      />
+                    </label>
+                    <label className="block">
+                      <span className="label text-[11px]">Weight</span>
+                      <input
+                        type="number"
+                        min={1}
+                        value={draft.weight}
+                        onChange={(e) => {
+                          patchTestCase(draft.id, { weight: Number(e.target.value) });
+                        }}
+                        className="input w-24 text-xs"
+                      />
+                    </label>
+                    <div className="ml-auto flex gap-2">
+                      <button
+                        type="button"
+                        disabled={busy}
+                        onClick={() => {
+                          void saveTestCase(draft);
+                        }}
+                        className="rounded-lg bg-cyan-400 px-3 py-1.5 text-xs font-bold text-slate-950 hover:bg-cyan-300 disabled:opacity-50"
+                      >
+                        {savingTestCaseId === draft.id ? 'Saving…' : draft.isNew ? 'Add' : 'Save'}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          void deleteTestCase(draft);
+                        }}
+                        className="rounded-lg border border-rose-500/40 px-3 py-1.5 text-xs text-rose-300 hover:bg-rose-500/10"
+                      >
+                        Delete
+                      </button>
+                    </div>
+                  </div>
                 </div>
               ))}
             </div>
@@ -423,39 +606,85 @@ export function ChallengeFormPage() {
 
       {/* Hints */}
       {isEdit && (
-        <div className="rounded-xl border border-slate-700/50 bg-slate-900 p-5 space-y-3">
+        <div className={sectionClass}>
           <div className="flex items-center justify-between">
             <h2 className="text-sm font-semibold text-white">Hints ({String(hints.length)})</h2>
             <button
               type="button"
-              onClick={() => {
-                void handleAddHint();
-              }}
+              onClick={addHintDraft}
               className="rounded-lg border border-slate-700 px-3 py-1 text-xs text-slate-300 hover:bg-slate-800"
             >
-              + Add
+              + Add hint
             </button>
           </div>
           {hints.length === 0 ? (
             <p className="text-xs text-slate-500">No hints yet.</p>
           ) : (
-            <div className="space-y-2">
-              {hints.map((h) => (
+            <div className="space-y-3">
+              {hints.map((draft) => (
                 <div
-                  key={h.id}
-                  className="flex items-start gap-3 rounded-lg border border-slate-700/50 bg-slate-800 px-3 py-2"
+                  key={draft.id}
+                  className="rounded-lg border border-slate-700/50 bg-slate-800 p-3 space-y-3"
                 >
-                  <span className="text-xs font-bold text-cyan-400 mt-0.5">#{String(h.level)}</span>
-                  <p className="flex-1 text-xs text-slate-300">{h.content}</p>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      void handleDeleteHint(h.id);
-                    }}
-                    className="text-xs text-rose-400 hover:text-rose-300"
-                  >
-                    ✕
-                  </button>
+                  <div className="grid gap-3 sm:grid-cols-[96px_1fr_120px]">
+                    <label className="block">
+                      <span className="label text-[11px]">Level</span>
+                      <input
+                        type="number"
+                        min={1}
+                        value={draft.level}
+                        onChange={(e) => {
+                          patchHint(draft.id, { level: Number(e.target.value) });
+                        }}
+                        className="input text-xs"
+                      />
+                    </label>
+                    <label className="block">
+                      <span className="label text-[11px]">Content</span>
+                      <textarea
+                        rows={2}
+                        value={draft.content}
+                        onChange={(e) => {
+                          patchHint(draft.id, { content: e.target.value });
+                        }}
+                        className="input text-xs resize-y"
+                        placeholder="The trick is to sort by value, not by index."
+                      />
+                    </label>
+                    <label className="block">
+                      <span className="label text-[11px]">XP penalty</span>
+                      <input
+                        type="number"
+                        min={0}
+                        value={draft.xpPenalty}
+                        onChange={(e) => {
+                          patchHint(draft.id, { xpPenalty: Number(e.target.value) });
+                        }}
+                        className="input text-xs"
+                      />
+                    </label>
+                  </div>
+                  <div className="flex justify-end gap-2">
+                    <button
+                      type="button"
+                      disabled={busy}
+                      onClick={() => {
+                        void saveHint(draft);
+                      }}
+                      className="rounded-lg bg-cyan-400 px-3 py-1.5 text-xs font-bold text-slate-950 hover:bg-cyan-300 disabled:opacity-50"
+                    >
+                      {savingHintId === draft.id ? 'Saving…' : draft.isNew ? 'Add' : 'Save'}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        void deleteHint(draft);
+                      }}
+                      className="rounded-lg border border-rose-500/40 px-3 py-1.5 text-xs text-rose-300 hover:bg-rose-500/10"
+                    >
+                      Delete
+                    </button>
+                  </div>
                 </div>
               ))}
             </div>

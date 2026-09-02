@@ -2,6 +2,7 @@ import { createServer, type IncomingMessage, type ServerResponse } from 'node:ht
 import { timingSafeEqual } from 'node:crypto';
 import { executeInSandbox } from './sandbox.js';
 import type { ExecutionResult } from './contracts.js';
+import { outputsMatch } from './output-compare.js';
 import { validateExecutionRequest } from './validation.js';
 
 const port = Number.parseInt(process.env['PORT'] ?? '3002', 10);
@@ -35,9 +36,6 @@ function send(res: ServerResponse, status: number, body: unknown): void {
   res.writeHead(status, { 'content-type': 'application/json', 'cache-control': 'no-store' });
   res.end(JSON.stringify(body));
 }
-function normalise(output: string | undefined): string {
-  return (output ?? '').replace(/\r\n/g, '\n').trimEnd();
-}
 
 const server = createServer((req, res) => {
   void (async () => {
@@ -65,25 +63,29 @@ const server = createServer((req, res) => {
       const outcome = await executeInSandbox(execution, testCase.input);
       totalTime += outcome.executionTimeMs ?? 0;
       peakMemory = Math.max(peakMemory, outcome.memoryUsedKb ?? 0);
-      if (outcome.status === 'EXECUTED') {
-        results.push({
-          testCaseId: testCase.id,
-          passed: normalise(outcome.runtimeOutput) === normalise(testCase.expectedOutput),
-          executionTimeMs: outcome.executionTimeMs,
-          memoryUsedKb: outcome.memoryUsedKb,
-          output: outcome.runtimeOutput,
-        });
-        continue;
-      }
-      send(res, 200, {
-        status: outcome.status,
-        executionTimeMs: totalTime || undefined,
-        memoryUsedKb: peakMemory || undefined,
-        compilerOutput: outcome.compilerOutput,
-        runtimeOutput: outcome.runtimeOutput,
-        results,
+      results.push({
+        testCaseId: testCase.id,
+        passed:
+          outcome.status === 'EXECUTED' &&
+          outputsMatch(outcome.runtimeOutput, testCase.expectedOutput),
+        executionTimeMs: outcome.executionTimeMs,
+        memoryUsedKb: outcome.memoryUsedKb,
+        output:
+          outcome.status === 'EXECUTED'
+            ? outcome.runtimeOutput
+            : (outcome.runtimeOutput ?? outcome.compilerOutput ?? ''),
       });
-      return;
+      if (outcome.status !== 'EXECUTED') {
+        send(res, 200, {
+          status: outcome.status,
+          executionTimeMs: totalTime || undefined,
+          memoryUsedKb: peakMemory || undefined,
+          compilerOutput: outcome.compilerOutput,
+          runtimeOutput: outcome.runtimeOutput,
+          results,
+        });
+        return;
+      }
     }
     const accepted = results.every((result) => result.passed);
     send(res, 200, {

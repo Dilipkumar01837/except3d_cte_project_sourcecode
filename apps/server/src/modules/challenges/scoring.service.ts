@@ -14,6 +14,7 @@ export function calculateScore(input: {
   elapsedMs: number;
   timeLimitMs: number;
   priorAttempts: number;
+  hintPenalty?: number;
 }): { score: number; xp: number; coins: number } {
   const accuracy = input.total === 0 ? 0 : input.passed / input.total;
   const speedBonus = input.elapsedMs <= input.timeLimitMs * 0.5 ? 0.2 : 0;
@@ -25,7 +26,7 @@ export function calculateScore(input: {
         DIFFICULTY_MULTIPLIER[input.difficulty] *
         accuracy *
         (1 + speedBonus - retryPenalty),
-    ),
+    ) - (input.hintPenalty ?? 0),
   );
   return { score: Math.round(accuracy * 100), xp, coins: Math.max(1, Math.floor(xp / 10)) };
 }

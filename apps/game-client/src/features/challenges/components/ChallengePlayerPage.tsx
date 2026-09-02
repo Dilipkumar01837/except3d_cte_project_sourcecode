@@ -1,7 +1,15 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
+import { io } from 'socket.io-client';
 import { MonacoCodeEditor } from './MonacoCodeEditor';
-import { challengeApi, type Challenge, type Language, type Submission } from '../lib/challenge-api';
+import {
+  challengeApi,
+  type Challenge,
+  type Language,
+  type RunResult,
+  type Submission,
+  type SubmissionDetail,
+} from '../lib/challenge-api';
 
 const defaultCode: Record<Language, string> = {
   PYTHON: '# Write your solution here\n',
@@ -22,6 +30,41 @@ const terminalStatuses = new Set([
   'INTERNAL_ERROR',
 ]);
 
+function statusTone(status: string): string {
+  if (status === 'ACCEPTED') return 'text-emerald-400';
+  if (
+    [
+      'WRONG_ANSWER',
+      'COMPILATION_ERROR',
+      'RUNTIME_ERROR',
+      'TIME_LIMIT_EXCEEDED',
+      'MEMORY_LIMIT_EXCEEDED',
+      'INTERNAL_ERROR',
+    ].includes(status)
+  )
+    return 'text-rose-300';
+  return 'text-brand-500';
+}
+
+function ResultRow({
+  label,
+  passed,
+  isHidden,
+}: {
+  label: string;
+  passed: boolean;
+  isHidden: boolean;
+}) {
+  return (
+    <div className="flex items-center justify-between rounded bg-slate-800 px-3 py-1.5 text-xs">
+      <span className={isHidden ? 'text-amber-300/90' : 'text-slate-300'}>{label}</span>
+      <span className={passed ? 'font-semibold text-emerald-400' : 'font-semibold text-rose-300'}>
+        {passed ? 'PASSED' : 'FAILED'}
+      </span>
+    </div>
+  );
+}
+
 export function ChallengePlayerPage() {
   const { slug = '' } = useParams();
   const [challenge, setChallenge] = useState<Challenge>();
@@ -29,30 +72,62 @@ export function ChallengePlayerPage() {
   const [code, setCode] = useState(defaultCode.PYTHON);
   const [submissions, setSubmissions] = useState<Submission[]>([]);
   const [selected, setSelected] = useState<Submission>();
-  const [hint, setHint] = useState('');
+  const [detail, setDetail] = useState<SubmissionDetail>();
+  const [run, setRun] = useState<RunResult>();
+  const [revealed, setRevealed] = useState<Record<number, { content: string; penalty: number }>>(
+    {},
+  );
+  const [revealingHint, setRevealingHint] = useState<number | null>(null);
+  const [aiHint, setAiHint] = useState('');
+  const [loadingAiHint, setLoadingAiHint] = useState(false);
   const [fontSize, setFontSize] = useState(14);
   const [error, setError] = useState('');
-  const [submitting, setSubmitting] = useState(false);
+  const [busy, setBusy] = useState(false);
+
+  const loadDetail = useCallback(
+    async (submission: Submission) => {
+      if (!slug) return;
+      if (!terminalStatuses.has(submission.status)) {
+        setDetail(undefined);
+        return;
+      }
+      try {
+        setDetail(await challengeApi.submissionDetails(slug, submission.id));
+      } catch {
+        setDetail(undefined);
+      }
+    },
+    [slug],
+  );
+
   const refreshSubmissions = useCallback(async () => {
     if (!slug) return;
     const values = await challengeApi.submissions(slug);
     setSubmissions(values);
-    setSelected(values[0]);
-  }, [slug]);
+    setSelected((current) => current ?? values[0]);
+    if (!values.length) {
+      setDetail(undefined);
+      return;
+    }
+    await loadDetail(values[0] as Submission);
+  }, [slug, loadDetail]);
+
   useEffect(() => {
     if (!slug) return;
     void Promise.all([challengeApi.get(slug), challengeApi.submissions(slug)])
-      .then(([item, history]) => {
+      .then(async ([item, history]) => {
         setChallenge(item);
         const initial = item.starterCode['PYTHON'] ?? defaultCode['PYTHON'];
         setCode(initial);
         setSubmissions(history);
         setSelected(history[0]);
+        await loadDetail(history[0] as Submission);
       })
       .catch(() => {
         setError('Challenge could not be loaded.');
       });
-  }, [slug]);
+  }, [slug, loadDetail]);
+
   useEffect(() => {
     if (!selected || terminalStatuses.has(selected.status)) return;
     const timer = window.setInterval(() => void refreshSubmissions(), 1500);
@@ -60,25 +135,141 @@ export function ChallengePlayerPage() {
       window.clearInterval(timer);
     };
   }, [refreshSubmissions, selected]);
+
+  useEffect(() => {
+    const token = localStorage.getItem('access_token');
+    if (!token || !slug) return;
+
+    const socket = io({ auth: { token } });
+    socket.on(
+      'submission:completed',
+      (event: { submissionId: string; status: string; score: number }) => {
+        setSubmissions((current) =>
+          current.map((submission) =>
+            submission.id === event.submissionId
+              ? { ...submission, status: event.status, score: event.score }
+              : submission,
+          ),
+        );
+        setSelected((current) => {
+          if (!current || current.id !== event.submissionId) return current;
+          const completed = { ...current, status: event.status, score: event.score };
+          void challengeApi
+            .submissionDetails(slug, event.submissionId)
+            .then((submissionDetail) => {
+              setDetail(submissionDetail);
+            })
+            .catch(() => {
+              setDetail(undefined);
+            });
+          return completed;
+        });
+      },
+    );
+
+    return () => {
+      socket.disconnect();
+    };
+  }, [slug]);
+
   const visibleTests = useMemo(() => challenge?.testCases ?? [], [challenge]);
+
+  const revealHint = async (level: number) => {
+    if (!slug || revealingHint !== null) return;
+    setRevealingHint(level);
+    setError('');
+    try {
+      const item = await challengeApi.hint(slug, level);
+      setRevealed((current) => ({
+        ...current,
+        [level]: { content: item.content, penalty: item.xpPenalty },
+      }));
+    } catch {
+      setError('Unable to reveal this hint.');
+    } finally {
+      setRevealingHint(null);
+    }
+  };
+
+  const requestAiHint = async () => {
+    if (!slug || !code.trim() || loadingAiHint) return;
+    setLoadingAiHint(true);
+    setError('');
+    try {
+      setAiHint(await challengeApi.aiHint(slug, language, code));
+    } catch {
+      setError('AI hints are unavailable. Configure GROQ_API_KEY on the server.');
+    } finally {
+      setLoadingAiHint(false);
+    }
+  };
+
   const submit = async () => {
-    if (!slug || !code.trim()) return;
-    setSubmitting(true);
+    if (!slug || !code.trim() || busy) return;
+    setBusy(true);
     setError('');
     try {
       const submission = await challengeApi.submit(slug, language, code);
       setSelected(submission);
       setSubmissions((current) => [submission, ...current]);
+      setDetail(undefined);
     } catch {
       setError('Submission failed. Check that you are signed in and try again.');
     } finally {
-      setSubmitting(false);
+      setBusy(false);
     }
   };
+
+  const runTests = async () => {
+    if (!slug || !code.trim() || busy) return;
+    setBusy(true);
+    setError('');
+    try {
+      setRun(await challengeApi.run(slug, language, code));
+    } catch {
+      setError('Unable to run against the example cases. The execution service may be offline.');
+    } finally {
+      setBusy(false);
+    }
+  };
+
   const chooseLanguage = (next: Language) => {
     setLanguage(next);
     setCode(challenge?.starterCode[next] ?? defaultCode[next]);
   };
+
+  const selectSubmission = async (submission: Submission) => {
+    setSelected(submission);
+    await loadDetail(submission);
+  };
+
+  const runRows = useMemo(() => {
+    if (!run) return [];
+    return run.results.map((result, index) => ({
+      label: visibleTests[index] ? `Example ${String(index + 1)}` : `Test ${String(index + 1)}`,
+      passed: result.passed,
+      isHidden: false,
+    }));
+  }, [run, visibleTests]);
+
+  const detailRows = useMemo(() => {
+    if (!detail) return [];
+    let visibleIndex = 0;
+    let hiddenIndex = 0;
+    return detail.results.map((result) => {
+      if (result.testCase.isHidden) {
+        hiddenIndex += 1;
+        return {
+          label: `Hidden test ${String(hiddenIndex)}`,
+          passed: result.passed,
+          isHidden: true,
+        };
+      }
+      visibleIndex += 1;
+      return { label: `Test ${String(visibleIndex)}`, passed: result.passed, isHidden: false };
+    });
+  }, [detail]);
+
   if (error && !challenge) return <div className="p-8 text-rose-200">{error}</div>;
   if (!challenge) return <div className="p-8 text-slate-300">Loading challenge…</div>;
   return (
@@ -130,24 +321,57 @@ export function ChallengePlayerPage() {
           </section>
           {challenge.hints.length > 0 && (
             <section>
-              <button
-                className="text-sm text-brand-500"
-                onClick={() =>
-                  void challengeApi
-                    .hint(slug, 1)
-                    .then((item) => {
-                      setHint(item.content);
-                    })
-                    .catch(() => {
-                      setError('Unable to reveal this hint.');
-                    })
-                }
-              >
-                Reveal hint
-              </button>
-              {hint && <p className="mt-2 rounded bg-brand-900/40 p-3 text-sm">{hint}</p>}
+              <h2 className="mb-2 font-semibold">Hints</h2>
+              <div className="space-y-2">
+                {challenge.hints.map((hint) => {
+                  const item = revealed[hint.level];
+                  return (
+                    <div
+                      key={hint.level}
+                      className="rounded-lg border border-slate-800 bg-slate-950 p-3"
+                    >
+                      <div className="flex items-center justify-between gap-3">
+                        <span className="text-xs font-bold text-cyan-400">Hint {hint.level}</span>
+                        {hint.xpPenalty > 0 && (
+                          <span className="text-xs text-amber-300/80">
+                            Costs {hint.xpPenalty} XP on completion
+                          </span>
+                        )}
+                      </div>
+                      {item ? (
+                        <p className="mt-2 text-sm text-slate-200">{item.content}</p>
+                      ) : (
+                        <button
+                          type="button"
+                          disabled={revealingHint !== null}
+                          onClick={() => void revealHint(hint.level)}
+                          className="mt-2 rounded border border-slate-700 px-3 py-1 text-xs text-brand-500 hover:bg-slate-800 disabled:opacity-50 disabled:pointer-events-none"
+                        >
+                          {revealingHint === hint.level ? 'Revealing…' : 'Reveal'}
+                        </button>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
             </section>
           )}
+          <section className="rounded-lg border border-cyan-400/20 bg-cyan-400/[.04] p-3">
+            <div className="flex items-center justify-between gap-3">
+              <h2 className="font-semibold">AI hint</h2>
+              <button
+                type="button"
+                disabled={loadingAiHint || !code.trim()}
+                onClick={() => {
+                  void requestAiHint();
+                }}
+                className="rounded border border-cyan-400/40 px-3 py-1 text-xs font-bold text-cyan-200 hover:bg-cyan-400/10 disabled:pointer-events-none disabled:opacity-50"
+              >
+                {loadingAiHint ? 'Thinking...' : 'Get hint'}
+              </button>
+            </div>
+            {aiHint && <p className="mt-2 text-sm text-slate-200">{aiHint}</p>}
+          </section>
         </section>
         <section className="flex min-h-[680px] flex-col overflow-hidden rounded-xl border border-slate-800 bg-slate-900">
           <div className="flex flex-wrap items-center gap-2 border-b border-slate-800 p-3">
@@ -188,11 +412,18 @@ export function ChallengePlayerPage() {
               Reset
             </button>
             <button
-              disabled={submitting}
+              disabled={busy}
+              className="rounded bg-slate-700 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50"
+              onClick={() => void runTests()}
+            >
+              {busy ? 'Working…' : 'Run tests'}
+            </button>
+            <button
+              disabled={busy}
               className="rounded bg-brand-500 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50"
               onClick={() => void submit()}
             >
-              {submitting ? 'Queueing…' : 'Run & Submit'}
+              {busy ? 'Working…' : 'Submit'}
             </button>
           </div>
           <div className="min-h-[380px] flex-1">
@@ -207,16 +438,51 @@ export function ChallengePlayerPage() {
           <div className="max-h-64 overflow-auto border-t border-slate-800 bg-slate-950 p-4">
             <div className="flex justify-between">
               <h2 className="text-sm font-semibold">Output console</h2>
-              {selected && <span className="text-xs text-brand-500">{selected.status}</span>}
+              {selected && (run || detail) && (
+                <span className={`text-xs ${statusTone(run?.status ?? detail?.status ?? '')}`}>
+                  {run ? `Run · ${run.status}` : detail?.status}
+                </span>
+              )}
             </div>
             {error && <p className="mt-2 text-sm text-rose-300">{error}</p>}
-            {selected ? (
+            {run ? (
+              <div className="mt-3 space-y-2">
+                <p className="font-mono text-xs text-slate-300">
+                  Time: {run.executionTimeMs ?? '—'} ms · Memory: {run.memoryUsedKb ?? '—'} KB
+                </p>
+                {run.compilerOutput && (
+                  <pre className="whitespace-pre-wrap rounded bg-slate-900 p-2 text-xs text-rose-200">
+                    {run.compilerOutput}
+                  </pre>
+                )}
+                {runRows.map((row) => (
+                  <ResultRow key={`${row.label}-${String(row.passed)}`} {...row} />
+                ))}
+              </div>
+            ) : detail ? (
+              <div className="mt-3 space-y-2">
+                <p className="font-mono text-xs text-slate-300">
+                  Score: {detail.score} · Time: {detail.executionTimeMs ?? '—'} ms · Memory:{' '}
+                  {detail.memoryUsedKb ?? '—'} KB
+                </p>
+                {detail.compilerOutput && (
+                  <pre className="whitespace-pre-wrap rounded bg-slate-900 p-2 text-xs text-rose-200">
+                    {detail.compilerOutput}
+                  </pre>
+                )}
+                {detailRows.map((row) => (
+                  <ResultRow key={`${row.label}-${String(row.isHidden)}`} {...row} />
+                ))}
+              </div>
+            ) : selected ? (
               <p className="mt-3 font-mono text-xs text-slate-300">
-                Score: {selected.score} · Time: {selected.executionTimeMs ?? '—'} ms · Memory:{' '}
-                {selected.memoryUsedKb ?? '—'} KB
+                {selected.status} · Score: {selected.score} · Time:{' '}
+                {selected.executionTimeMs ?? '—'} ms · Memory: {selected.memoryUsedKb ?? '—'} KB
               </p>
             ) : (
-              <p className="mt-3 text-xs text-slate-500">Run your solution to see results.</p>
+              <p className="mt-3 text-xs text-slate-500">
+                Run or submit your solution to see results.
+              </p>
             )}
             <h3 className="mt-4 text-xs font-semibold uppercase text-slate-500">
               Submission history
@@ -225,9 +491,7 @@ export function ChallengePlayerPage() {
               <button
                 key={item.id}
                 className="mt-2 block text-left text-xs text-slate-300 hover:text-white"
-                onClick={() => {
-                  setSelected(item);
-                }}
+                onClick={() => void selectSubmission(item)}
               >
                 {new Date(item.createdAt).toLocaleTimeString()} · {item.language} · {item.status}
               </button>

@@ -5,7 +5,7 @@ import { defineConfig, devices } from '@playwright/test';
  *
  * Prerequisites:
  *   1. pnpm docker:up
- *   2. pnpm --filter @code-to-escape/server dev  (port 3001)
+ *   2. pnpm --filter @code-to-escape/server dev  (port 3000)
  *   3. pnpm --filter @code-to-escape/game-client dev  (port 5173)
  *   4. pnpm --filter @code-to-escape/admin-dashboard dev  (port 5174)
  *

@@ -75,7 +75,10 @@ export async function listLevels(req: Request, res: Response): Promise<void> {
       levels: {
         where: { isPublished: true },
         orderBy: { number: 'asc' },
-        include: { progress: { where: { userId: id } } },
+        include: {
+          progress: { where: { userId: id } },
+          challenge: { select: { slug: true, title: true } },
+        },
       },
     },
   });

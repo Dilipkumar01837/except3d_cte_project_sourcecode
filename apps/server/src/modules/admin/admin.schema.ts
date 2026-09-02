@@ -83,6 +83,7 @@ export const createLevelSchema = z.object({
   difficulty: z.number().int().min(1).max(10).default(1),
   xpReward: z.number().int().min(0).default(50),
   previewUrl: z.string().url().optional(),
+  challengeId: z.string().uuid().optional().nullable(),
 });
 
 export const updateLevelSchema = createLevelSchema.partial();

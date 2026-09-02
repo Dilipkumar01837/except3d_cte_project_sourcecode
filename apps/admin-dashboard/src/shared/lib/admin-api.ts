@@ -101,6 +101,8 @@ export interface AdminLevel {
   description: string;
   difficulty: number;
   xpReward: number;
+  challengeId?: string | null;
+  challenge?: { slug: string; title: string } | null;
   isPublished: boolean;
 }
 

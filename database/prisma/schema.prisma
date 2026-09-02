@@ -75,6 +75,10 @@ model User {
   dailyRewards   PlayerDailyReward[]
   notifications  PlayerNotification[]
   submissions    Submission[]
+  hintReveals    PlayerHintReveal[]
+  createdDuels   DuelMatch[] @relation("DuelCreator")
+  joinedDuels    DuelMatch[] @relation("DuelOpponent")
+  wonDuels       DuelMatch[] @relation("DuelWinner")
 
   @@index([email])
   @@index([username])
@@ -230,6 +234,13 @@ enum SubmissionStatus {
   INTERNAL_ERROR
 }
 
+enum DuelStatus {
+  OPEN
+  ACTIVE
+  COMPLETED
+  CANCELLED
+}
+
 model GameWorld {
   id          String   @id @default(uuid())
   slug        String   @unique
@@ -257,11 +268,13 @@ model GameLevel {
   difficulty  Int      @default(1)
   xpReward    Int      @default(50)
   previewUrl  String?
+  challengeId String?  @unique
   isPublished Boolean  @default(false)
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
   world       GameWorld @relation(fields: [worldId], references: [id], onDelete: Cascade)
+  challenge   Challenge? @relation(fields: [challengeId], references: [id], onDelete: SetNull)
   progress    PlayerLevelProgress[]
   @@unique([worldId, number])
   @@index([worldId, isPublished])
@@ -408,8 +421,33 @@ model Challenge {
   solutions       ChallengeSolution[]
   hints           ChallengeHint[]
   submissions     Submission[]
+  gameLevel       GameLevel?
+  duels           DuelMatch[]
   @@index([isPublished, difficulty])
   @@index([type])
+}
+
+model DuelMatch {
+  id          String     @id @default(uuid())
+  challengeId String
+  creatorId   String
+  opponentId  String?
+  winnerId    String?
+  status      DuelStatus @default(OPEN)
+  createdAt   DateTime   @default(now())
+  startedAt   DateTime?
+  completedAt DateTime?
+
+  challenge Challenge @relation(fields: [challengeId], references: [id], onDelete: Cascade)
+  creator   User      @relation("DuelCreator", fields: [creatorId], references: [id], onDelete: Cascade)
+  opponent  User?     @relation("DuelOpponent", fields: [opponentId], references: [id], onDelete: SetNull)
+  winner    User?     @relation("DuelWinner", fields: [winnerId], references: [id], onDelete: SetNull)
+  submissions Submission[] @relation("DuelSubmission")
+
+  @@index([status, createdAt])
+  @@index([creatorId, createdAt])
+  @@index([opponentId, createdAt])
+  @@index([winnerId])
 }
 
 model ChallengeTestCase {
@@ -442,7 +480,19 @@ model ChallengeHint {
   content     String
   xpPenalty   Int       @default(0)
   challenge   Challenge @relation(fields: [challengeId], references: [id], onDelete: Cascade)
+  reveals     PlayerHintReveal[]
   @@unique([challengeId, level])
+}
+
+model PlayerHintReveal {
+  id         String        @id @default(uuid())
+  userId     String
+  hintId     String
+  revealedAt DateTime      @default(now())
+  user       User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  hint       ChallengeHint @relation(fields: [hintId], references: [id], onDelete: Cascade)
+  @@unique([userId, hintId])
+  @@index([userId, revealedAt])
 }
 
 model Submission {
@@ -462,8 +512,11 @@ model Submission {
   user        User                @relation(fields: [userId], references: [id], onDelete: Cascade)
   challenge   Challenge           @relation(fields: [challengeId], references: [id], onDelete: Cascade)
   results     SubmissionTestResult[]
+  duelId      String?
+  duel        DuelMatch?            @relation("DuelSubmission", fields: [duelId], references: [id], onDelete: SetNull)
   @@index([userId, challengeId, createdAt])
   @@index([status, createdAt])
+  @@index([duelId, userId, createdAt])
 }
 
 model SubmissionTestResult {

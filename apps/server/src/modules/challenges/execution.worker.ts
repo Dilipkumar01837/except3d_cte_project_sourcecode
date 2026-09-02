@@ -1,131 +1,34 @@
 import { prisma } from '../../shared/lib/prisma.js';
 import { redis } from '../../shared/lib/redis.js';
-import { env } from '../../config/index.js';
 import { dequeueSubmission } from './execution.queue.js';
 import { calculateScore, nextRank } from './scoring.service.js';
 import { emitToUser } from '../../shared/lib/socket.js';
 import { updateLeaderboard } from '../../shared/lib/leaderboard.js';
 import { evaluateAchievements } from './achievement.service.js';
-
-type RunnerResult = {
-  status:
-    | 'ACCEPTED'
-    | 'WRONG_ANSWER'
-    | 'COMPILATION_ERROR'
-    | 'RUNTIME_ERROR'
-    | 'TIME_LIMIT_EXCEEDED'
-    | 'MEMORY_LIMIT_EXCEEDED'
-    | 'INTERNAL_ERROR';
-  executionTimeMs?: number;
-  memoryUsedKb?: number;
-  compilerOutput?: string;
-  runtimeOutput?: string;
-  results: Array<{
-    testCaseId: string;
-    passed: boolean;
-    executionTimeMs?: number;
-    memoryUsedKb?: number;
-    output?: string;
-  }>;
-};
-
-const terminalStatuses = new Set<RunnerResult['status']>([
-  'ACCEPTED',
-  'WRONG_ANSWER',
-  'COMPILATION_ERROR',
-  'RUNTIME_ERROR',
-  'TIME_LIMIT_EXCEEDED',
-  'MEMORY_LIMIT_EXCEEDED',
-  'INTERNAL_ERROR',
-]);
-const MAX_RUNNER_TEXT_BYTES = 64_000;
-
-/** Treat the runner as an untrusted internal dependency: validate and bound every value it returns. */
-function validateRunnerResult(
-  value: unknown,
-  permittedTestCaseIds: ReadonlySet<string>,
-): RunnerResult | null {
-  if (typeof value !== 'object' || value === null) return null;
-  const body = value as Record<string, unknown>;
-  if (
-    typeof body.status !== 'string' ||
-    !terminalStatuses.has(body.status as RunnerResult['status']) ||
-    !Array.isArray(body.results)
-  )
-    return null;
-  const text = (input: unknown): string | undefined =>
-    typeof input === 'string' ? input.slice(0, MAX_RUNNER_TEXT_BYTES) : undefined;
-  const metric = (input: unknown): number | undefined =>
-    typeof input === 'number' && Number.isFinite(input) && input >= 0
-      ? Math.floor(input)
-      : undefined;
-  const seen = new Set<string>();
-  const results: RunnerResult['results'] = [];
-  for (const item of body.results) {
-    if (typeof item !== 'object' || item === null) return null;
-    const result = item as Record<string, unknown>;
-    if (
-      typeof result.testCaseId !== 'string' ||
-      !permittedTestCaseIds.has(result.testCaseId) ||
-      seen.has(result.testCaseId) ||
-      typeof result.passed !== 'boolean'
-    )
-      return null;
-    seen.add(result.testCaseId);
-    results.push({
-      testCaseId: result.testCaseId,
-      passed: result.passed,
-      executionTimeMs: metric(result.executionTimeMs),
-      memoryUsedKb: metric(result.memoryUsedKb),
-      output: text(result.output),
-    });
-  }
-  return {
-    status: body.status as RunnerResult['status'],
-    executionTimeMs: metric(body.executionTimeMs),
-    memoryUsedKb: metric(body.memoryUsedKb),
-    compilerOutput: text(body.compilerOutput),
-    runtimeOutput: text(body.runtimeOutput),
-    results,
-  };
-}
+import { executeWithRunner, type JudgeExecutionResult } from './judge-execution.js';
 
 async function executeSubmission(submissionId: string): Promise<void> {
   const submission = await prisma.submission.findUnique({
-    include: { challenge: { include: { testCases: true } } },
+    include: {
+      challenge: { include: { testCases: true, gameLevel: { include: { world: true } } } },
+    },
     where: { id: submissionId },
   });
   if (!submission || submission.status !== 'QUEUED') return;
   await prisma.submission.update({ where: { id: submissionId }, data: { status: 'RUNNING' } });
-  const runnerUrl = env.codeRunnerUrl;
-  let result: RunnerResult;
+  let result: JudgeExecutionResult;
   try {
-    const response = await fetch(`${runnerUrl}/execute`, {
-      method: 'POST',
-      headers: {
-        'content-type': 'application/json',
-        authorization: `Bearer ${env.codeRunnerToken}`,
-      },
-      body: JSON.stringify({
-        language: submission.language,
-        sourceCode: submission.sourceCode,
-        timeLimitMs: submission.challenge.timeLimitMs,
-        memoryLimitMb: submission.challenge.memoryLimitMb,
-        testCases: submission.challenge.testCases.map(({ id, input, expectedOutput }) => ({
-          id,
-          input,
-          expectedOutput,
-        })),
-      }),
-      signal: AbortSignal.timeout(submission.challenge.timeLimitMs + 5_000),
+    result = await executeWithRunner({
+      language: submission.language,
+      sourceCode: submission.sourceCode,
+      timeLimitMs: submission.challenge.timeLimitMs,
+      memoryLimitMb: submission.challenge.memoryLimitMb,
+      testCases: submission.challenge.testCases.map(({ id, input, expectedOutput }) => ({
+        id,
+        input,
+        expectedOutput,
+      })),
     });
-    if (!response.ok) throw new Error(`Runner returned ${String(response.status)}`);
-    const validated = validateRunnerResult(
-      await response.json(),
-      new Set(submission.challenge.testCases.map((testCase) => testCase.id)),
-    );
-    if (!validated) throw new Error('Runner returned an invalid execution result');
-    result = validated;
   } catch (error) {
     result = {
       status: 'INTERNAL_ERROR',
@@ -142,6 +45,14 @@ async function executeSubmission(submissionId: string): Promise<void> {
       status: { not: 'QUEUED' },
     },
   });
+  const revealedHints = await prisma.playerHintReveal.findMany({
+    where: {
+      userId: submission.userId,
+      hint: { challengeId: submission.challengeId },
+    },
+    select: { hint: { select: { xpPenalty: true } } },
+  });
+  const hintPenalty = revealedHints.reduce((sum, reveal) => sum + reveal.hint.xpPenalty, 0);
   const reward =
     result.status === 'ACCEPTED'
       ? calculateScore({
@@ -152,6 +63,7 @@ async function executeSubmission(submissionId: string): Promise<void> {
           elapsedMs: result.executionTimeMs ?? submission.challenge.timeLimitMs,
           timeLimitMs: submission.challenge.timeLimitMs,
           priorAttempts,
+          hintPenalty,
         })
       : { score: 0, xp: 0, coins: 0 };
   let newXp = 0;
@@ -197,6 +109,91 @@ async function executeSubmission(submissionId: string): Promise<void> {
         accuracy: Math.max(profile.accuracy, reward.score / 100),
       },
     });
+    const gameLevel = submission.challenge.gameLevel;
+    if (gameLevel) {
+      const previousProgress = await tx.playerLevelProgress.findUnique({
+        where: { userId_levelId: { userId: submission.userId, levelId: gameLevel.id } },
+        select: { bestTimeSeconds: true },
+      });
+      const elapsedSeconds = result.executionTimeMs
+        ? Math.min(Math.ceil(result.executionTimeMs / 1000), 2_147_483_647)
+        : null;
+      await tx.playerLevelProgress.upsert({
+        where: { userId_levelId: { userId: submission.userId, levelId: gameLevel.id } },
+        create: {
+          userId: submission.userId,
+          levelId: gameLevel.id,
+          isCompleted: true,
+          stars: reward.score >= 100 ? 3 : reward.score >= 70 ? 2 : 1,
+          attempts: 1,
+          bestTimeSeconds: elapsedSeconds,
+          completedAt: new Date(),
+          lastPlayedAt: new Date(),
+        },
+        update: {
+          isCompleted: true,
+          stars: { set: Math.max(1, reward.score >= 100 ? 3 : reward.score >= 70 ? 2 : 1) },
+          attempts: { increment: 1 },
+          bestTimeSeconds:
+            elapsedSeconds === null
+              ? undefined
+              : {
+                  set:
+                    previousProgress?.bestTimeSeconds === null ||
+                    previousProgress?.bestTimeSeconds === undefined
+                      ? elapsedSeconds
+                      : Math.min(previousProgress.bestTimeSeconds, elapsedSeconds),
+                },
+          completedAt: new Date(),
+          lastPlayedAt: new Date(),
+        },
+      });
+      const publishedLevelCount = await tx.gameLevel.count({
+        where: { worldId: gameLevel.worldId, isPublished: true },
+      });
+      const completedLevelCount = await tx.playerLevelProgress.count({
+        where: {
+          userId: submission.userId,
+          level: { worldId: gameLevel.worldId, isPublished: true },
+          isCompleted: true,
+        },
+      });
+      const completionPercent =
+        publishedLevelCount > 0
+          ? Math.min(100, Math.round((completedLevelCount / publishedLevelCount) * 100))
+          : 0;
+      await tx.playerWorldProgress.upsert({
+        where: { userId_worldId: { userId: submission.userId, worldId: gameLevel.worldId } },
+        create: {
+          userId: submission.userId,
+          worldId: gameLevel.worldId,
+          isUnlocked: true,
+          completionPercent,
+          lastPlayedAt: new Date(),
+          completedAt: completionPercent === 100 ? new Date() : null,
+        },
+        update: {
+          isUnlocked: true,
+          completionPercent,
+          lastPlayedAt: new Date(),
+          completedAt: completionPercent === 100 ? new Date() : undefined,
+        },
+      });
+      if (completionPercent === 100) {
+        const nextWorld = await tx.gameWorld.findFirst({
+          where: { sortOrder: { gt: gameLevel.world.sortOrder }, isPublished: true },
+          orderBy: { sortOrder: 'asc' },
+          select: { id: true },
+        });
+        if (nextWorld) {
+          await tx.playerWorldProgress.upsert({
+            where: { userId_worldId: { userId: submission.userId, worldId: nextWorld.id } },
+            create: { userId: submission.userId, worldId: nextWorld.id, isUnlocked: true },
+            update: { isUnlocked: true },
+          });
+        }
+      }
+    }
     await tx.playerNotification.create({
       data: {
         userId: submission.userId,
@@ -265,6 +262,24 @@ async function executeSubmission(submissionId: string): Promise<void> {
     xpEarned: reward.xp,
     coinsEarned: reward.coins,
   });
+
+  if (submission.duelId && result.status === 'ACCEPTED') {
+    const duelResult = await prisma.duelMatch.updateMany({
+      where: { id: submission.duelId, status: 'ACTIVE', winnerId: null },
+      data: { status: 'COMPLETED', winnerId: submission.userId, completedAt: new Date() },
+    });
+    if (duelResult.count > 0) {
+      const duel = await prisma.duelMatch.findUnique({
+        where: { id: submission.duelId },
+        select: { creatorId: true, opponentId: true, winnerId: true },
+      });
+      if (duel?.winnerId) {
+        const event = { duelId: submission.duelId, status: 'COMPLETED', winnerId: duel.winnerId };
+        emitToUser(duel.creatorId, 'duel:completed', event);
+        if (duel.opponentId) emitToUser(duel.opponentId, 'duel:completed', event);
+      }
+    }
+  }
 }
 
 /** Starts a durable queue consumer. Deploy this process separately from the HTTP API. */

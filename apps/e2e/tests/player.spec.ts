@@ -94,7 +94,7 @@ test.describe('Login', () => {
   test.beforeAll(async ({ request }) => {
     email = testEmail();
     username = testUsername();
-    await request.post('http://localhost:3001/api/v1/auth/register', {
+    await request.post('http://localhost:3000/api/v1/auth/register', {
       data: { email, username, password: TEST_PASSWORD },
     });
   });
@@ -135,7 +135,7 @@ test.describe('Dashboard', () => {
   test.beforeAll(async ({ request }) => {
     email = testEmail();
     username = testUsername();
-    await request.post('http://localhost:3001/api/v1/auth/register', {
+    await request.post('http://localhost:3000/api/v1/auth/register', {
       data: { email, username, password: TEST_PASSWORD },
     });
   });
@@ -186,7 +186,7 @@ test.describe('Challenges list', () => {
   test.beforeAll(async ({ request }) => {
     email = testEmail();
     username = testUsername();
-    await request.post('http://localhost:3001/api/v1/auth/register', {
+    await request.post('http://localhost:3000/api/v1/auth/register', {
       data: { email, username, password: TEST_PASSWORD },
     });
   });
@@ -214,7 +214,7 @@ test.describe('Profile page', () => {
   test.beforeAll(async ({ request }) => {
     email = testEmail();
     username = testUsername();
-    await request.post('http://localhost:3001/api/v1/auth/register', {
+    await request.post('http://localhost:3000/api/v1/auth/register', {
       data: { email, username, password: TEST_PASSWORD },
     });
   });

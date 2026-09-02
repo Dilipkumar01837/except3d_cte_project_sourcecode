@@ -23,7 +23,7 @@ export function testUsername(): string {
 export const TEST_PASSWORD = 'E2eTest123!';
 export const GAME_CLIENT_URL = 'http://localhost:5173';
 export const ADMIN_URL = 'http://localhost:5174';
-export const API_URL = 'http://localhost:3001/api/v1';
+export const API_URL = 'http://localhost:3000/api/v1';
 
 // ─── Game-client helpers ──────────────────────────────────────────
 
