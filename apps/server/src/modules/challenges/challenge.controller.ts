@@ -4,7 +4,7 @@ import { prisma } from '../../shared/lib/prisma.js';
 import { sendError, sendSuccess } from '../../shared/lib/response.js';
 import { enqueueSubmission } from './execution.queue.js';
 import { executeWithRunner, JudgeServiceError } from './judge-execution.js';
-import { AiHintUnavailableError, generateAiHint } from './ai-hint.service.js';
+import { AiHintUnavailableError, generateAiErrorHint, generateAiHint } from './ai-hint.service.js';
 
 function playerId(req: Request, res: Response): string | undefined {
   const id = req.user?.sub;
@@ -151,6 +151,72 @@ export async function getAiHint(req: Request, res: Response): Promise<void> {
         challengeId: challenge.id,
         language: body.language as ProgrammingLanguage,
         hint,
+      },
+    });
+    sendSuccess(res, { hint });
+  } catch (error) {
+    sendError(
+      res,
+      503,
+      'AI_HINT_UNAVAILABLE',
+      error instanceof AiHintUnavailableError
+        ? error.message
+        : 'AI hints are temporarily unavailable.',
+    );
+  }
+}
+
+export async function getAiErrorHint(req: Request, res: Response): Promise<void> {
+  const id = playerId(req, res);
+  const slug = stringParam(req, res, 'slug');
+  const body = req.body as {
+    language?: string;
+    sourceCode?: string;
+    errorType?: string;
+    errorMessage?: string;
+    line?: number;
+    column?: number;
+  };
+  if (!id || !slug) return;
+  if (
+    typeof body.sourceCode !== 'string' ||
+    body.sourceCode.length === 0 ||
+    body.sourceCode.length > 100_000 ||
+    typeof body.language !== 'string' ||
+    !Object.values(ProgrammingLanguage).includes(body.language as ProgrammingLanguage) ||
+    typeof body.errorType !== 'string' ||
+    typeof body.errorMessage !== 'string' ||
+    body.errorMessage.length === 0 ||
+    (body.line !== undefined && (!Number.isInteger(body.line) || body.line < 1)) ||
+    (body.column !== undefined && (!Number.isInteger(body.column) || body.column < 1))
+  ) {
+    sendError(res, 400, 'VALIDATION_ERROR', 'Invalid AI error hint request');
+    return;
+  }
+  const challenge = await prisma.challenge.findFirst({
+    where: { slug, isPublished: true },
+    select: { id: true, statement: true },
+  });
+  if (!challenge) {
+    sendError(res, 404, 'NOT_FOUND', 'Challenge not found');
+    return;
+  }
+  try {
+    const hint = await generateAiErrorHint({
+      statement: challenge.statement,
+      language: body.language,
+      sourceCode: body.sourceCode,
+      errorType: body.errorType,
+      errorMessage: body.errorMessage,
+      line: body.line,
+      column: body.column,
+    });
+    await prisma.aiHintHistory.create({
+      data: {
+        userId: id,
+        challengeId: challenge.id,
+        language: body.language as ProgrammingLanguage,
+        hint: `${hint.explanation}\n\nHint: ${hint.hint}${hint.suggestedFix ? `\n\nSuggested direction: ${hint.suggestedFix}` : ''}`,
       },
     });
     sendSuccess(res, { hint });

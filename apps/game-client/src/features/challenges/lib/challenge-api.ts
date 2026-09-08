@@ -49,6 +49,31 @@ export interface RunResult {
   compilerOutput?: string | null;
   runtimeOutput?: string | null;
   results: TestResult[];
+  diagnostics?: ExecutionDiagnostic[];
+}
+export type ExecutionDiagnosticStatus =
+  | 'COMPILATION_ERROR'
+  | 'RUNTIME_ERROR'
+  | 'WRONG_ANSWER'
+  | 'TIME_LIMIT_EXCEEDED'
+  | 'MEMORY_LIMIT_EXCEEDED'
+  | 'INTERNAL_ERROR';
+export interface ExecutionDiagnostic {
+  status: ExecutionDiagnosticStatus;
+  errorType: string;
+  message: string;
+  rawOutput?: string;
+  line?: number;
+  column?: number;
+  endLine?: number;
+  endColumn?: number;
+  language: Language;
+  testCaseId?: string;
+}
+export interface AiErrorHint {
+  explanation: string;
+  hint: string;
+  suggestedFix?: string;
 }
 export interface SubmissionDetail extends Submission {
   compilerOutput: string | null;
@@ -111,6 +136,23 @@ export const challengeApi = {
       await apiClient.post(`/challenges/${encodeURIComponent(slug)}/hints/ai`, {
         language,
         sourceCode,
+      }),
+    ).hint;
+  },
+  async aiErrorHint(
+    slug: string,
+    language: Language,
+    sourceCode: string,
+    diagnostic: ExecutionDiagnostic,
+  ): Promise<AiErrorHint> {
+    return dataOf<{ hint: AiErrorHint }>(
+      await apiClient.post(`/challenges/${encodeURIComponent(slug)}/hints/ai-error`, {
+        language,
+        sourceCode,
+        errorType: diagnostic.errorType,
+        errorMessage: diagnostic.message,
+        line: diagnostic.line,
+        column: diagnostic.column,
       }),
     ).hint;
   },

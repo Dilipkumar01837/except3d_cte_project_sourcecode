@@ -6,6 +6,7 @@ import {
   getChallenge,
   getHint,
   getAiHint,
+  getAiErrorHint,
   getSubmission,
   getSubmissionStatus,
   listChallenges,
@@ -19,6 +20,12 @@ challengeRouter.get('/', asyncHandler(listChallenges));
 challengeRouter.get('/:slug', asyncHandler(getChallenge));
 challengeRouter.get('/:slug/hints/:level', authenticate, asyncHandler(getHint));
 challengeRouter.post('/:slug/hints/ai', authenticate, aiHintRateLimit, asyncHandler(getAiHint));
+challengeRouter.post(
+  '/:slug/hints/ai-error',
+  authenticate,
+  aiHintRateLimit,
+  asyncHandler(getAiErrorHint),
+);
 challengeRouter.get('/:slug/submissions', authenticate, asyncHandler(listSubmissions));
 challengeRouter.get(
   '/:slug/submissions/:submissionId/status',

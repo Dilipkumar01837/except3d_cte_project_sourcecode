@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import type * as MonacoNamespace from 'monaco-editor';
-import type { Language } from '../lib/challenge-api';
+import type { ExecutionDiagnostic, Language } from '../lib/challenge-api';
 
 // monaco-editor is large; import only the editor API type, not the full bundle.
 // The actual monaco instance is loaded lazily via dynamic import so it is only
@@ -36,12 +36,16 @@ export function MonacoCodeEditor({
   readOnly,
   fontSize,
   onChange,
+  diagnostics = [],
+  revealDiagnostic,
 }: {
   value: string;
   language: Language;
   readOnly?: boolean;
   fontSize: number;
   onChange: (value: string) => void;
+  diagnostics?: ExecutionDiagnostic[];
+  revealDiagnostic?: ExecutionDiagnostic;
 }) {
   const host = useRef<HTMLDivElement>(null);
   const editor = useRef<IEditor | null>(null);
@@ -98,6 +102,37 @@ export function MonacoCodeEditor({
       });
     }
   }, [fontSize, readOnly, value, language]);
+
+  useEffect(() => {
+    if (!editor.current) return;
+    void loadMonaco().then((monaco) => {
+      const model = editor.current?.getModel();
+      if (!model) return;
+      monaco.editor.setModelMarkers(
+        model,
+        'execution',
+        diagnostics
+          .filter((diagnostic) => diagnostic.line !== undefined)
+          .map((diagnostic) => ({
+            severity: monaco.MarkerSeverity.Error,
+            message: diagnostic.message,
+            startLineNumber: diagnostic.line ?? 1,
+            startColumn: diagnostic.column ?? 1,
+            endLineNumber: diagnostic.endLine ?? diagnostic.line ?? 1,
+            endColumn: diagnostic.endColumn ?? (diagnostic.column ? diagnostic.column + 1 : 1),
+          })),
+      );
+      if (revealDiagnostic?.line) {
+        const position = {
+          lineNumber: revealDiagnostic.line,
+          column: revealDiagnostic.column ?? 1,
+        };
+        editor.current?.setPosition(position);
+        editor.current?.revealPositionInCenter(position);
+        editor.current?.focus();
+      }
+    });
+  }, [diagnostics, revealDiagnostic]);
 
   if (fallback) {
     return (

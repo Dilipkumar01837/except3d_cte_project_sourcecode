@@ -35,7 +35,7 @@ function extractErrorMessage(err: unknown, fallback: string): string {
   const error = e as Record<string, unknown>;
   const details = error['details'];
   if (Array.isArray(details) && details.length > 0) {
-    const firstDetail = details[0];
+    const firstDetail: unknown = details[0];
     if (typeof firstDetail === 'object' && firstDetail !== null) {
       const detailMessage = (firstDetail as Record<string, unknown>)['message'];
       if (typeof detailMessage === 'string') return detailMessage;

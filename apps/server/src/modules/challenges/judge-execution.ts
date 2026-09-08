@@ -1,4 +1,6 @@
 import { env } from '../../config/index.js';
+import type { ProgrammingLanguage } from '@prisma/client';
+import { parseExecutionDiagnostics, type ExecutionDiagnostic } from './execution-diagnostics.js';
 
 export type RunnerStatus =
   | 'ACCEPTED'
@@ -24,6 +26,7 @@ export interface JudgeExecutionResult {
   compilerOutput?: string;
   runtimeOutput?: string;
   results: ExecutedTestResult[];
+  diagnostics?: ExecutionDiagnostic[];
 }
 
 export interface JudgeExecutionInput {
@@ -120,7 +123,7 @@ export async function executeWithRunner(input: JudgeExecutionInput): Promise<Jud
         memoryLimitMb: input.memoryLimitMb,
         testCases: input.testCases,
       }),
-      signal: AbortSignal.timeout(input.timeLimitMs + 5_000),
+      signal: AbortSignal.timeout(input.timeLimitMs * input.testCases.length + 5_000),
     });
   } catch (error) {
     throw new JudgeServiceError(
@@ -133,5 +136,8 @@ export async function executeWithRunner(input: JudgeExecutionInput): Promise<Jud
     new Set(input.testCases.map((testCase) => testCase.id)),
   );
   if (!validated) throw new JudgeServiceError('Runner returned an invalid execution result');
-  return validated;
+  return {
+    ...validated,
+    diagnostics: parseExecutionDiagnostics(input.language as ProgrammingLanguage, validated),
+  };
 }

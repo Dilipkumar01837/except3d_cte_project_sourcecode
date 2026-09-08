@@ -8,6 +8,8 @@
     "build": "tsc -p tsconfig.json",
     "start": "node dist/index.js",
     "worker": "tsx src/worker.ts",
+    "seed:beginner": "tsx scripts/seed-beginner-challenges.ts",
+    "validate:beginner": "tsx scripts/validate-beginner-challenges.ts",
     "lint": "eslint src/",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "vitest run",

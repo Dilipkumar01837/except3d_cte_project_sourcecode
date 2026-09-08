@@ -17,6 +17,7 @@
     "db:generate": "pnpm --filter @code-to-escape/database run generate",
     "db:migrate": "pnpm --filter @code-to-escape/database run migrate",
     "db:migrate:deploy": "pnpm --filter @code-to-escape/database run migrate:deploy",
+    "db:seed:beginner": "pnpm --filter @code-to-escape/server run seed:beginner",
     "db:migrate:reset": "pnpm --filter @code-to-escape/database run migrate:reset",
     "db:studio": "pnpm --filter @code-to-escape/database run studio",
     "docker:up": "docker compose up -d",

@@ -5,6 +5,8 @@ import { MonacoCodeEditor } from './MonacoCodeEditor';
 import {
   challengeApi,
   type Challenge,
+  type AiErrorHint,
+  type ExecutionDiagnostic,
   type Language,
   type RunResult,
   type Submission,
@@ -46,6 +48,14 @@ function statusTone(status: string): string {
   return 'text-brand-500';
 }
 
+function diagnosticTitle(status: string): string {
+  return status.replaceAll('_', ' ');
+}
+
+function diagnosticTone(status: string): string {
+  return status === 'WRONG_ANSWER' ? 'text-amber-300' : 'text-rose-300';
+}
+
 function ResultRow({
   label,
   passed,
@@ -74,6 +84,11 @@ export function ChallengePlayerPage() {
   const [selected, setSelected] = useState<Submission>();
   const [detail, setDetail] = useState<SubmissionDetail>();
   const [run, setRun] = useState<RunResult>();
+  const [diagnostics, setDiagnostics] = useState<ExecutionDiagnostic[]>([]);
+  const [selectedDiagnostic, setSelectedDiagnostic] = useState<ExecutionDiagnostic>();
+  const [aiErrorHint, setAiErrorHint] = useState<AiErrorHint>();
+  const [loadingAiErrorHint, setLoadingAiErrorHint] = useState(false);
+  const [aiErrorUnavailable, setAiErrorUnavailable] = useState(false);
   const [revealed, setRevealed] = useState<Record<number, { content: string; penalty: number }>>(
     {},
   );
@@ -114,6 +129,10 @@ export function ChallengePlayerPage() {
 
   useEffect(() => {
     if (!slug) return;
+    setDiagnostics([]);
+    setSelectedDiagnostic(undefined);
+    setAiErrorHint(undefined);
+    setAiErrorUnavailable(false);
     void Promise.all([challengeApi.get(slug), challengeApi.submissions(slug)])
       .then(async ([item, history]) => {
         setChallenge(item);
@@ -204,10 +223,27 @@ export function ChallengePlayerPage() {
     }
   };
 
+  const requestAiErrorHint = async () => {
+    if (!slug || !selectedDiagnostic || !code.trim() || loadingAiErrorHint) return;
+    setLoadingAiErrorHint(true);
+    setAiErrorUnavailable(false);
+    try {
+      setAiErrorHint(await challengeApi.aiErrorHint(slug, language, code, selectedDiagnostic));
+    } catch {
+      setAiErrorUnavailable(true);
+    } finally {
+      setLoadingAiErrorHint(false);
+    }
+  };
+
   const submit = async () => {
     if (!slug || !code.trim() || busy) return;
     setBusy(true);
     setError('');
+    setRun(undefined);
+    setDiagnostics([]);
+    setSelectedDiagnostic(undefined);
+    setAiErrorHint(undefined);
     try {
       const submission = await challengeApi.submit(slug, language, code);
       setSelected(submission);
@@ -224,9 +260,17 @@ export function ChallengePlayerPage() {
     if (!slug || !code.trim() || busy) return;
     setBusy(true);
     setError('');
+    setAiErrorHint(undefined);
+    setAiErrorUnavailable(false);
     try {
-      setRun(await challengeApi.run(slug, language, code));
+      const result = await challengeApi.run(slug, language, code);
+      const nextDiagnostics = result.diagnostics ?? [];
+      setRun(result);
+      setDiagnostics(nextDiagnostics);
+      setSelectedDiagnostic(nextDiagnostics[0]);
     } catch {
+      setDiagnostics([]);
+      setSelectedDiagnostic(undefined);
       setError('Unable to run against the example cases. The execution service may be offline.');
     } finally {
       setBusy(false);
@@ -236,6 +280,10 @@ export function ChallengePlayerPage() {
   const chooseLanguage = (next: Language) => {
     setLanguage(next);
     setCode(challenge?.starterCode[next] ?? defaultCode[next]);
+    setRun(undefined);
+    setDiagnostics([]);
+    setSelectedDiagnostic(undefined);
+    setAiErrorHint(undefined);
   };
 
   const selectSubmission = async (submission: Submission) => {
@@ -373,7 +421,7 @@ export function ChallengePlayerPage() {
             {aiHint && <p className="mt-2 text-sm text-slate-200">{aiHint}</p>}
           </section>
         </section>
-        <section className="flex min-h-[680px] flex-col overflow-hidden rounded-xl border border-slate-800 bg-slate-900">
+        <section className="relative flex min-h-[680px] flex-col overflow-hidden rounded-xl border border-slate-800 bg-slate-900">
           <div className="flex flex-wrap items-center gap-2 border-b border-slate-800 p-3">
             <select
               aria-label="Language"
@@ -407,6 +455,10 @@ export function ChallengePlayerPage() {
               className="rounded bg-slate-800 px-3 py-2 text-sm"
               onClick={() => {
                 setCode(challenge.starterCode[language] ?? defaultCode[language]);
+                setRun(undefined);
+                setDiagnostics([]);
+                setSelectedDiagnostic(undefined);
+                setAiErrorHint(undefined);
               }}
             >
               Reset
@@ -426,6 +478,18 @@ export function ChallengePlayerPage() {
               {busy ? 'Working…' : 'Submit'}
             </button>
           </div>
+          {diagnostics.length > 0 && (
+            <button
+              type="button"
+              aria-label="Get AI help for this error"
+              title="Need help with this error?"
+              disabled={loadingAiErrorHint}
+              onClick={() => void requestAiErrorHint()}
+              className="absolute right-4 top-16 z-10 rounded-full border border-cyan-300/60 bg-slate-950/95 px-4 py-2 text-xs font-bold text-cyan-100 shadow-lg shadow-cyan-950/40 transition hover:bg-cyan-400/20 focus:outline-none focus:ring-2 focus:ring-cyan-300 disabled:opacity-60"
+            >
+              {loadingAiErrorHint ? '🤖 Thinking…' : '🤖 AI Hint'}
+            </button>
+          )}
           <div className="min-h-[380px] flex-1">
             <MonacoCodeEditor
               key={language}
@@ -433,8 +497,87 @@ export function ChallengePlayerPage() {
               language={language}
               fontSize={fontSize}
               onChange={setCode}
+              diagnostics={diagnostics}
+              revealDiagnostic={selectedDiagnostic}
             />
           </div>
+          {diagnostics.length > 0 && (
+            <section
+              aria-label="Execution diagnostics"
+              className="relative border-t border-rose-400/20 bg-rose-950/20 p-4"
+            >
+              <div className="flex items-center justify-between gap-3">
+                <h2 className="text-sm font-semibold text-rose-200">Execution diagnostics</h2>
+              </div>
+              <div className="mt-3 space-y-2">
+                {diagnostics.map((diagnostic, index) => {
+                  const active = diagnostic === selectedDiagnostic;
+                  return (
+                    <button
+                      type="button"
+                      key={`${diagnostic.testCaseId ?? 'diagnostic'}-${String(index)}`}
+                      onClick={() => {
+                        setSelectedDiagnostic(diagnostic);
+                      }}
+                      className={`block w-full rounded-lg border p-3 text-left transition focus:outline-none focus:ring-2 focus:ring-cyan-300 ${active ? 'border-cyan-300/60 bg-slate-900' : 'border-slate-800 bg-slate-950/50 hover:border-slate-700'}`}
+                    >
+                      <div className="flex flex-wrap items-center gap-2 text-xs font-bold">
+                        <span className={diagnosticTone(diagnostic.status)}>
+                          {diagnosticTitle(diagnostic.status)}
+                        </span>
+                        {diagnostic.line && (
+                          <span className="text-slate-400">
+                            Line {String(diagnostic.line)}
+                            {diagnostic.column ? `, Column ${String(diagnostic.column)}` : ''}
+                          </span>
+                        )}
+                        {diagnostic.testCaseId && (
+                          <span className="text-slate-500">Test case failed</span>
+                        )}
+                      </div>
+                      <p className="mt-1 text-sm text-slate-200">{diagnostic.message}</p>
+                      {diagnostic.rawOutput && (
+                        <pre className="mt-2 max-h-24 overflow-auto whitespace-pre-wrap rounded bg-slate-950 p-2 text-xs text-rose-100/80">
+                          {diagnostic.rawOutput}
+                        </pre>
+                      )}
+                    </button>
+                  );
+                })}
+              </div>
+              {loadingAiErrorHint && (
+                <p className="mt-3 text-sm text-cyan-100" role="status">
+                  Analyzing your error…
+                </p>
+              )}
+              {aiErrorUnavailable && (
+                <div className="mt-3 flex items-center justify-between gap-3 text-sm text-rose-200">
+                  <span>AI assistance is temporarily unavailable.</span>
+                  <button
+                    type="button"
+                    className="font-semibold text-cyan-200 underline"
+                    onClick={() => void requestAiErrorHint()}
+                  >
+                    Try again
+                  </button>
+                </div>
+              )}
+              {aiErrorHint && !loadingAiErrorHint && (
+                <div className="mt-3 rounded-lg border border-cyan-300/20 bg-cyan-300/[.06] p-3 text-sm text-slate-200">
+                  <h3 className="font-semibold text-cyan-100">AI Hint</h3>
+                  <p className="mt-2 whitespace-pre-wrap">{aiErrorHint.explanation}</p>
+                  <p className="mt-3 font-semibold text-cyan-100">Hint</p>
+                  <p className="mt-1 whitespace-pre-wrap">{aiErrorHint.hint}</p>
+                  {aiErrorHint.suggestedFix && (
+                    <>
+                      <p className="mt-3 font-semibold text-cyan-100">Suggested direction</p>
+                      <p className="mt-1 whitespace-pre-wrap">{aiErrorHint.suggestedFix}</p>
+                    </>
+                  )}
+                </div>
+              )}
+            </section>
+          )}
           <div className="max-h-64 overflow-auto border-t border-slate-800 bg-slate-950 p-4">
             <div className="flex justify-between">
               <h2 className="text-sm font-semibold">Output console</h2>
