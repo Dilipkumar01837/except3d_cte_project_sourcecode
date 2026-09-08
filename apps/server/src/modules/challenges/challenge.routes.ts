@@ -12,13 +12,13 @@ import {
   listSubmissions,
   runCode,
 } from './challenge.controller.js';
-import { submissionRateLimit } from '../../shared/middleware/rate-limit.js';
+import { aiHintRateLimit, submissionRateLimit } from '../../shared/middleware/rate-limit.js';
 
 export const challengeRouter: IRouter = Router();
 challengeRouter.get('/', asyncHandler(listChallenges));
 challengeRouter.get('/:slug', asyncHandler(getChallenge));
 challengeRouter.get('/:slug/hints/:level', authenticate, asyncHandler(getHint));
-challengeRouter.post('/:slug/hints/ai', authenticate, asyncHandler(getAiHint));
+challengeRouter.post('/:slug/hints/ai', authenticate, aiHintRateLimit, asyncHandler(getAiHint));
 challengeRouter.get('/:slug/submissions', authenticate, asyncHandler(listSubmissions));
 challengeRouter.get(
   '/:slug/submissions/:submissionId/status',

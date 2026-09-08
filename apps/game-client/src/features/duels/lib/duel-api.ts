@@ -7,9 +7,20 @@ export interface Duel {
   createdAt: string;
   startedAt: string | null;
   completedAt: string | null;
+  winnerId: string | null;
   challenge: { id: string; slug: string; title: string };
   creator: { id: string; username: string };
   opponent: { id: string; username: string } | null;
+  submissions: Array<{
+    id: string;
+    userId: string;
+    status: string;
+    score: number;
+    executionTimeMs: number | null;
+    createdAt: string;
+    completedAt: string | null;
+    user: { username: string };
+  }>;
 }
 
 function dataOf<T>(response: { data: { data: T } }): T {

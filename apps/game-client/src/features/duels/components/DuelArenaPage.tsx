@@ -38,6 +38,7 @@ export function DuelArenaPage() {
       .get(duelId)
       .then(async (item) => {
         setDuel(item);
+        setWinnerId(item.winnerId ?? undefined);
         const challengeItem = await challengeApi.get(item.challenge.slug);
         setChallenge(challengeItem);
         const nextLanguage = challengeItem.supportedLanguages[0] ?? 'PYTHON';
@@ -122,7 +123,12 @@ export function DuelArenaPage() {
           {duel.status}
         </span>
         {winnerId ? (
-          <span className="font-bold text-cyan-200">Winner recorded</span>
+          <span className="font-bold text-cyan-200">
+            Winner:{' '}
+            {duel.creator.id === winnerId
+              ? `@${duel.creator.username}`
+              : `@${duel.opponent?.username ?? 'opponent'}`}
+          </span>
         ) : (
           <span className="text-slate-400">First accepted solution wins</span>
         )}
@@ -185,6 +191,28 @@ export function DuelArenaPage() {
           )}
         </section>
       </div>
+      {duel.status === 'COMPLETED' && (
+        <section className="mt-5 rounded-2xl border border-white/10 bg-white/[.035] p-5">
+          <h2 className="font-bold text-white">Final results</h2>
+          <div className="mt-3 space-y-2">
+            {duel.submissions.map((item) => (
+              <div
+                key={item.id}
+                className="flex items-center justify-between gap-3 border-b border-white/10 py-2 text-sm last:border-b-0"
+              >
+                <span className="text-slate-300">@{item.user.username}</span>
+                <span
+                  className={
+                    item.userId === winnerId ? 'font-bold text-emerald-300' : 'text-slate-400'
+                  }
+                >
+                  {item.status} · {item.score} points
+                </span>
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
     </PlayerPageShell>
   );
 }

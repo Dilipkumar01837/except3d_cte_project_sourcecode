@@ -42,7 +42,7 @@ export const env = {
   codeRunnerUrl: getEnv('CODE_RUNNER_URL', 'http://localhost:3002'),
   codeRunnerToken: getSecret('CODE_RUNNER_TOKEN', 'code-to-escape-dev-runner-token'),
   groqApiKey: getEnv('GROQ_API_KEY', ''),
-  groqModel: getEnv('GROQ_MODEL', 'llama-3.3-70b-versatile'),
+  groqModel: getEnv('GROQ_MODEL', 'qwen/qwen3.8-27b'),
   // OAuth — optional, disabled when empty
   googleClientId: getEnv('GOOGLE_CLIENT_ID', ''),
   googleClientSecret: getEnv('GOOGLE_CLIENT_SECRET', ''),

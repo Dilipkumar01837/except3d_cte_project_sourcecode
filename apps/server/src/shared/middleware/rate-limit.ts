@@ -37,3 +37,14 @@ export const submissionRateLimit = rateLimit({
     error: { code: 'RATE_LIMITED', message: 'Too many code executions. Please wait a minute.' },
   },
 });
+
+export const aiHintRateLimit = rateLimit({
+  windowMs: 60 * 60 * 1000,
+  max: RELAXED ? 10_000 : 20,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: {
+    success: false,
+    error: { code: 'RATE_LIMITED', message: 'Too many AI hint requests. Please try again later.' },
+  },
+});

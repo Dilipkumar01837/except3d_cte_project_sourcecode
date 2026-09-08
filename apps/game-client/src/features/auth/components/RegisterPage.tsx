@@ -85,7 +85,22 @@ export function RegisterPage() {
           autoComplete="email"
           placeholder="you@example.com"
           error={errors.email?.message}
-          {...register('email', { required: 'Email is required' })}
+          {...register('email', {
+            required: 'Email is required',
+            validate: (value) => {
+              const [localPart, domain] = value.split('@');
+              return (
+                Boolean(
+                  localPart &&
+                  !localPart.endsWith('.') &&
+                  domain &&
+                  domain.includes('.') &&
+                  !domain.startsWith('.') &&
+                  !domain.endsWith('.'),
+                ) || 'Enter a valid email address'
+              );
+            },
+          })}
         />
 
         <Input

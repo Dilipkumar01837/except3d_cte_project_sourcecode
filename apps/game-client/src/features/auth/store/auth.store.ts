@@ -32,7 +32,16 @@ function extractErrorMessage(err: unknown, fallback: string): string {
   if (typeof d !== 'object' || d === null) return fallback;
   const e = (d as Record<string, unknown>)['error'];
   if (typeof e !== 'object' || e === null) return fallback;
-  const msg = (e as Record<string, unknown>)['message'];
+  const error = e as Record<string, unknown>;
+  const details = error['details'];
+  if (Array.isArray(details) && details.length > 0) {
+    const firstDetail = details[0];
+    if (typeof firstDetail === 'object' && firstDetail !== null) {
+      const detailMessage = (firstDetail as Record<string, unknown>)['message'];
+      if (typeof detailMessage === 'string') return detailMessage;
+    }
+  }
+  const msg = error['message'];
   return typeof msg === 'string' ? msg : fallback;
 }
 

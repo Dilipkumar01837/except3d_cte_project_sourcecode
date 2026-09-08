@@ -79,6 +79,7 @@ model User {
   createdDuels   DuelMatch[] @relation("DuelCreator")
   joinedDuels    DuelMatch[] @relation("DuelOpponent")
   wonDuels       DuelMatch[] @relation("DuelWinner")
+  aiHintHistory  AiHintHistory[]
 
   @@index([email])
   @@index([username])
@@ -423,6 +424,7 @@ model Challenge {
   submissions     Submission[]
   gameLevel       GameLevel?
   duels           DuelMatch[]
+  aiHintHistory   AiHintHistory[]
   @@index([isPublished, difficulty])
   @@index([type])
 }
@@ -448,6 +450,21 @@ model DuelMatch {
   @@index([creatorId, createdAt])
   @@index([opponentId, createdAt])
   @@index([winnerId])
+}
+
+model AiHintHistory {
+  id          String   @id @default(uuid())
+  userId      String
+  challengeId String
+  language    ProgrammingLanguage
+  hint        String
+  createdAt   DateTime @default(now())
+
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  challenge Challenge @relation(fields: [challengeId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
+  @@index([challengeId, createdAt])
 }
 
 model ChallengeTestCase {

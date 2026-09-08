@@ -13,6 +13,19 @@ const duelSelect = {
   challenge: { select: { id: true, slug: true, title: true } },
   creator: { select: { id: true, username: true } },
   opponent: { select: { id: true, username: true } },
+  submissions: {
+    select: {
+      id: true,
+      userId: true,
+      status: true,
+      score: true,
+      executionTimeMs: true,
+      createdAt: true,
+      completedAt: true,
+      user: { select: { username: true } },
+    },
+    orderBy: { createdAt: 'asc' },
+  },
 } as const;
 
 export async function listOpenDuels() {

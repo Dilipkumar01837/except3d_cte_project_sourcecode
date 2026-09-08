@@ -549,6 +549,16 @@ describe('POST /api/v1/challenges/:slug/submissions edge cases', () => {
   });
 });
 
+describe('POST /api/v1/challenges/:slug/hints/ai', () => {
+  it('requires authentication before accessing AI hints', async () => {
+    const res = await request(app)
+      .post('/api/v1/challenges/unknown-challenge/hints/ai')
+      .send({ language: 'PYTHON', sourceCode: 'print(1)' });
+    expect(res.status).toBe(401);
+    expect(body(res).success).toBe(false);
+  });
+});
+
 // Password reset flow
 describe('Password reset — full flow', () => {
   const resetEmail = `reset_${String(Date.now())}@example.com`;

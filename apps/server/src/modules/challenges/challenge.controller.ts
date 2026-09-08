@@ -133,7 +133,7 @@ export async function getAiHint(req: Request, res: Response): Promise<void> {
   }
   const challenge = await prisma.challenge.findFirst({
     where: { slug, isPublished: true },
-    select: { statement: true },
+    select: { id: true, statement: true },
   });
   if (!challenge) {
     sendError(res, 404, 'NOT_FOUND', 'Challenge not found');
@@ -144,6 +144,14 @@ export async function getAiHint(req: Request, res: Response): Promise<void> {
       statement: challenge.statement,
       language: body.language,
       sourceCode: body.sourceCode,
+    });
+    await prisma.aiHintHistory.create({
+      data: {
+        userId: id,
+        challengeId: challenge.id,
+        language: body.language as ProgrammingLanguage,
+        hint,
+      },
     });
     sendSuccess(res, { hint });
   } catch (error) {
