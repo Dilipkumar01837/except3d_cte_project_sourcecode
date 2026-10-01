@@ -159,9 +159,12 @@ describe('GET /api/v1/player/dashboard', () => {
       .get('/api/v1/player/dashboard')
       .set('Authorization', `Bearer ${accessToken}`);
     expect(res.status).toBe(200);
-    const b = body<{ user: unknown; summary: unknown }>(res);
+    const b = body<{ user: Record<string, unknown>; summary: unknown }>(res);
     expect(b.data).toHaveProperty('user');
     expect(b.data).toHaveProperty('summary');
+    expect(b.data.user).not.toHaveProperty('passwordHash');
+    expect(b.data.user).not.toHaveProperty('emailVerifyToken');
+    expect(b.data.user).not.toHaveProperty('resetPasswordToken');
   });
 
   it('returns 401 without token', async () => {

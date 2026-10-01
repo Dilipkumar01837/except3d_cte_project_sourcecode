@@ -25,8 +25,6 @@ export function AppRouter() {
       <Route element={<AppLayout />}>
         <Route index element={<HomePage />} />
         <Route path="/explore" element={<ChallengeListPage />} />
-        {/* /reserve redirects to home — reservation page removed (no product purpose) */}
-        <Route path="/reserve" element={<Navigate to="/" replace />} />
       </Route>
 
       {/* Auth routes (no layout) */}

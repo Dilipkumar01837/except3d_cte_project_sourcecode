@@ -3,7 +3,7 @@
 ## Base URL
 
 ```
-http://localhost:3001/api/v1
+http://localhost:3000/api/v1
 ```
 
 All responses follow this envelope:
@@ -165,7 +165,7 @@ Supported languages: `JAVA`, `PYTHON`, `JAVASCRIPT`, `TYPESCRIPT`, `CPP`, `GO`, 
 
 ## Real-Time (Socket.IO)
 
-Connect to `ws://localhost:3001` with `{ auth: { token: "<access_token>" } }`.
+Connect to `ws://localhost:3000` with `{ auth: { token: "<access_token>" } }`.
 
 | Event (server→client)  | Payload                                                  | When                       |
 | ---------------------- | -------------------------------------------------------- | -------------------------- |

@@ -7,12 +7,13 @@ on:
     branches: [main, master, develop]
 
 env:
-  # Minimal env for typecheck/lint/build — no real secrets needed
-  NODE_ENV: test
+  # No NODE_ENV=test shortcut exists: the judge has no fake-verdict path, so
+  # there is nothing for that flag to switch on. It is set only for the unit
+  # test job so Prisma/disable-logging behave predictably.
   DATABASE_URL: postgresql://ci:ci@localhost:5432/cte_ci
   REDIS_URL: redis://localhost:6379
-  JWT_SECRET: ci-jwt-secret-not-for-prod
-  REFRESH_TOKEN_SECRET: ci-refresh-secret-not-for-prod
+  JWT_SECRET: ci-jwt-secret-not-for-prod-0123456789abcdef
+  REFRESH_TOKEN_SECRET: ci-refresh-secret-not-for-prod-0123456789abcdef
   CODE_RUNNER_TOKEN: ci-runner-token
 
 jobs:
@@ -96,7 +97,61 @@ jobs:
         run: pnpm --filter @code-to-escape/server exec npx prisma migrate deploy --schema ../../database/prisma/schema.prisma
 
       - name: Run server unit tests
+        env:
+          NODE_ENV: test
         run: pnpm --filter @code-to-escape/server test
+
+      - name: Run code-runner unit tests
+        run: pnpm --filter @code-to-escape/code-runner test
+
+  sandbox:
+    # Real judging coverage. judging.test.ts self-skips when no runner answers
+    # /health, so without this job the 11 tests that actually execute submitted
+    # code are never run in CI and a broken judge would look green.
+    name: Sandbox execution
+    runs-on: ubuntu-latest
+    needs: quality
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Generate Prisma client
+        run: pnpm db:generate
+
+      - name: Build the sandbox image
+        run: docker compose build code-runner-sandbox
+
+      - name: Start the code runner
+        run: |
+          docker compose up -d code-runner
+          for i in $(seq 1 30); do
+            if curl -fsS http://localhost:3002/health; then exit 0; fi
+            sleep 2
+          done
+          echo "code-runner did not become healthy" >&2
+          docker compose logs code-runner >&2
+          exit 1
+
+      - name: Assert the runner is reachable (do not silently skip)
+        run: |
+          curl -fsS http://localhost:3002/health
+
+      - name: Run judging tests against the live sandbox
+        env:
+          CODE_RUNNER_URL: http://localhost:3002
+          REQUIRE_SANDBOX: '1'
+        run: pnpm --filter @code-to-escape/server exec vitest run src/tests/judging.test.ts
 
   docker:
     name: Docker Compose config

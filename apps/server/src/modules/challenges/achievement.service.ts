@@ -9,9 +9,12 @@
  *     → Persist atomically (upsert progress, create notification, emit Socket.IO)
  *
  * Idempotency:
- *   - Progress upsert uses @@unique([userId, achievementId])
- *   - Unlock check guards with unlockedAt === null before awarding rewards
- *   - XP/coin award is inside the same transaction — no double-awards
+ *   - @@unique([userId, achievementId]) is the authoritative guard. The unlock is
+ *     claimed by INSERTING the row inside the reward transaction, so a
+ *     concurrent second evaluation hits a unique violation and pays nothing.
+ *   - A pre-transaction unlockedAt read is only a fast path; it cannot see an
+ *     uncommitted insert, so it is never the thing that prevents a double award.
+ *   - XP/coin award is inside the same transaction — no partial payouts
  *
  * Adding a new trigger:
  *   1. Add the trigger name to AchievementTrigger
@@ -21,6 +24,13 @@
 
 import { prisma } from '../../shared/lib/prisma.js';
 import { emitToUser } from '../../shared/lib/socket.js';
+
+/** Prisma unique-constraint violation, used to detect a lost unlock race. */
+function isUniqueViolation(error: unknown): boolean {
+  return (
+    typeof error === 'object' && error !== null && (error as { code?: unknown }).code === 'P2002'
+  );
+}
 
 // ─────────────────────────────────────────────────────────────────
 // Supported trigger types
@@ -158,45 +168,48 @@ async function processAchievement(
     return;
   }
 
-  // Check if already unlocked (idempotency guard)
-  const existing = await prisma.playerAchievement.findUnique({
-    where: { userId_achievementId: { userId, achievementId: achievement.id } },
-  });
-  if (existing?.unlockedAt) return; // already unlocked — nothing to do
-
-  // Unlock atomically
-  await prisma.$transaction(async (tx) => {
-    // Update or create the player achievement row
-    await tx.playerAchievement.upsert({
-      where: { userId_achievementId: { userId, achievementId: achievement.id } },
-      create: {
-        userId,
-        achievementId: achievement.id,
-        progress: achievement.target,
-        unlockedAt: new Date(),
-      },
-      update: { progress: achievement.target, unlockedAt: new Date() },
-    });
-
-    // Award XP/coins if the achievement has a reward
-    if (achievement.xpReward > 0) {
-      await tx.profile.update({
-        where: { userId },
-        data: { xp: { increment: achievement.xpReward } },
+  // Claim the unlock inside a single transaction. The guard must be a write, not
+  // a read: under READ COMMITTED two concurrent evaluations of the same
+  // (userId, achievementId) both observe unlockedAt = null and both increment XP.
+  // Creating the row is the arbiter - the unique constraint means exactly one
+  // caller inserts, and only that caller pays the reward.
+  let claimed = false;
+  try {
+    claimed = await prisma.$transaction(async (tx) => {
+      await tx.playerAchievement.create({
+        data: {
+          userId,
+          achievementId: achievement.id,
+          progress: achievement.target,
+          unlockedAt: new Date(),
+        },
       });
-    }
 
-    // Create notification
-    await tx.playerNotification.create({
-      data: {
-        userId,
-        type: 'ACHIEVEMENT_UNLOCKED',
-        title: '🏆 Achievement unlocked!',
-        body: `${achievement.name}: ${achievement.description}`,
-        data: { achievementId: achievement.id, xpReward: achievement.xpReward },
-      },
+      if (achievement.xpReward > 0) {
+        await tx.profile.update({
+          where: { userId },
+          data: { xp: { increment: achievement.xpReward } },
+        });
+      }
+
+      await tx.playerNotification.create({
+        data: {
+          userId,
+          type: 'ACHIEVEMENT_UNLOCKED',
+          title: 'Achievement unlocked!',
+          body: `${achievement.name}: ${achievement.description}`,
+          data: { achievementId: achievement.id, xpReward: achievement.xpReward },
+        },
+      });
+      return true;
     });
-  });
+  } catch (error) {
+    // P2002 = unique violation, i.e. someone else already unlocked and paid it.
+    if (!isUniqueViolation(error)) throw error;
+    claimed = false;
+  }
+
+  if (!claimed) return;
 
   // Emit Socket.IO event (non-critical, outside transaction)
   emitToUser(userId, 'achievement:unlocked', {
@@ -225,7 +238,21 @@ function slugMatchesTrigger(slug: string, trigger: AchievementTrigger): boolean 
   const prefixes = TRIGGER_PREFIXES[trigger];
   const lower = slug.toLowerCase();
   for (const prefix of prefixes) {
-    if (lower.startsWith(prefix) || lower.includes(prefix)) return true;
+    // A prefix that already ends in `_` is a bare namespace prefix (e.g. the
+    // `xp_` family). Appending a separator to it tested "xp_500" against
+    // "xp__500", so every such prefix was unreachable and achievements named
+    // xp_500 / solve_5_challenges / level_5 could never fire. Match those
+    // directly.
+    if (prefix.endsWith('_')) {
+      if (lower.startsWith(prefix)) return true;
+      continue;
+    }
+    // Segment match only. A bare includes() made unrelated slugs match: the
+    // "first_" prefix fired on "fastest_submission" and "nested_loop_boss",
+    // silently unlocking the wrong achievements.
+    if (lower === prefix || lower.startsWith(`${prefix}_`) || lower.startsWith(`${prefix}-`)) {
+      return true;
+    }
   }
   // Fallback: if slug doesn't match any known prefix pattern at all,
   // we don't evaluate it for this trigger (opt-in by naming convention)

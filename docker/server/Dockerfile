@@ -20,5 +20,7 @@ ENV NODE_ENV=production
 COPY --from=build /app/apps/server/dist ./dist
 COPY --from=build /app/apps/server/package.json ./
 COPY --from=build /app/node_modules ./node_modules
-EXPOSE 3001
+EXPOSE 3000
+# Default runs the API. The worker uses the same image with
+# `command: node dist/worker.js`; both are required for judging to happen.
 CMD ["node", "dist/index.js"]

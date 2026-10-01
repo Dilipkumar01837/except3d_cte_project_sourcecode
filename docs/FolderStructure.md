@@ -5,14 +5,15 @@ code-to-escape/
 ├── apps/
 │   ├── game-client/          # Main game React app
 │   ├── admin-dashboard/      # Admin React shell
-│   └── server/               # Express API server
+│   ├── server/               # Express API server + execution worker entrypoint
+│   ├── code-runner/          # Sandbox runner HTTP service
+│   └── e2e/                  # Playwright E2E suite
 ├── packages/
 │   ├── config/               # ESLint + TypeScript configs
 │   ├── types/                # Shared types
 │   ├── utils/                # Shared utilities
 │   ├── shared/               # Shared constants
-│   ├── ui/                   # Shared UI components
-│   └── game-engine/          # Game engine (Day 3+)
+│   └── ui/                   # Shared UI components
 ├── database/
 │   └── prisma/               # Prisma schema
 ├── docker/                   # Docker configs

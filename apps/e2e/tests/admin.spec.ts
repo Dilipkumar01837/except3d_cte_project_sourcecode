@@ -20,7 +20,7 @@
  */
 
 import { test, expect } from '@playwright/test';
-import { testEmail, testUsername, TEST_PASSWORD, ADMIN_URL } from './helpers';
+import { testEmail, testUsername, TEST_PASSWORD, ADMIN_URL, API_URL } from './helpers';
 
 const ADMIN_EMAIL = process.env['ADMIN_E2E_EMAIL'];
 const ADMIN_PASSWORD = process.env['ADMIN_E2E_PASSWORD'];
@@ -36,28 +36,28 @@ test.describe('RBAC — Player cannot access admin', () => {
   test.beforeAll(async ({ request }) => {
     playerEmail = testEmail();
     playerUsername = testUsername();
-    await request.post('http://localhost:3000/api/v1/auth/register', {
+    await request.post(API_URL + '/auth/register', {
       data: { email: playerEmail, username: playerUsername, password: TEST_PASSWORD },
     });
   });
 
   test('admin API returns 403 for PLAYER role', async ({ request }) => {
     // Login to get token
-    const loginRes = await request.post('http://localhost:3000/api/v1/auth/login', {
+    const loginRes = await request.post(API_URL + '/auth/login', {
       data: { email: playerEmail, password: TEST_PASSWORD },
     });
     const loginBody = (await loginRes.json()) as { data: { accessToken: string } };
     const token = loginBody.data.accessToken;
 
     // Try admin endpoint
-    const adminRes = await request.get('http://localhost:3000/api/v1/admin/overview', {
+    const adminRes = await request.get(API_URL + '/admin/overview', {
       headers: { Authorization: `Bearer ${token}` },
     });
     expect(adminRes.status()).toBe(403);
   });
 
   test('admin API returns 401 for unauthenticated', async ({ request }) => {
-    const res = await request.get('http://localhost:3000/api/v1/admin/overview');
+    const res = await request.get(API_URL + '/admin/overview');
     expect(res.status()).toBe(401);
   });
 });
@@ -155,7 +155,7 @@ test.describe('Admin dashboard', () => {
 
 test.describe('API contract', () => {
   test('health endpoint returns 200', async ({ request }) => {
-    const res = await request.get('http://localhost:3000/api/v1/health');
+    const res = await request.get(API_URL + '/health');
     expect(res.status()).toBe(200);
     const body = (await res.json()) as { status: string };
     expect(body.status).toBe('ok');
@@ -164,7 +164,7 @@ test.describe('API contract', () => {
   test('register returns 201 with token and user', async ({ request }) => {
     const email = testEmail();
     const username = testUsername();
-    const res = await request.post('http://localhost:3000/api/v1/auth/register', {
+    const res = await request.post(API_URL + '/auth/register', {
       data: { email, username, password: TEST_PASSWORD },
     });
     expect(res.status()).toBe(201);
@@ -177,10 +177,10 @@ test.describe('API contract', () => {
     const email = testEmail();
     const username1 = testUsername();
     const username2 = testUsername();
-    await request.post('http://localhost:3000/api/v1/auth/register', {
+    await request.post(API_URL + '/auth/register', {
       data: { email, username: username1, password: TEST_PASSWORD },
     });
-    const res = await request.post('http://localhost:3000/api/v1/auth/register', {
+    const res = await request.post(API_URL + '/auth/register', {
       data: { email, username: username2, password: TEST_PASSWORD },
     });
     expect(res.status()).toBe(409);
@@ -189,31 +189,31 @@ test.describe('API contract', () => {
   test('login with wrong password returns 401', async ({ request }) => {
     const email = testEmail();
     const username = testUsername();
-    await request.post('http://localhost:3000/api/v1/auth/register', {
+    await request.post(API_URL + '/auth/register', {
       data: { email, username, password: TEST_PASSWORD },
     });
-    const res = await request.post('http://localhost:3000/api/v1/auth/login', {
+    const res = await request.post(API_URL + '/auth/login', {
       data: { email, password: 'WrongPassword999!' },
     });
     expect(res.status()).toBe(401);
   });
 
   test('forgot-password always returns 200', async ({ request }) => {
-    const res = await request.post('http://localhost:3000/api/v1/auth/forgot-password', {
+    const res = await request.post(API_URL + '/auth/forgot-password', {
       data: { email: 'nobody@test.invalid' },
     });
     expect(res.status()).toBe(200);
   });
 
   test('challenge list returns array', async ({ request }) => {
-    const res = await request.get('http://localhost:3000/api/v1/challenges');
+    const res = await request.get(API_URL + '/challenges');
     expect(res.status()).toBe(200);
     const body = (await res.json()) as { data: { challenges: unknown[] } };
     expect(Array.isArray(body.data.challenges)).toBe(true);
   });
 
   test('error responses include code field', async ({ request }) => {
-    const res = await request.get('http://localhost:3000/api/v1/auth/me');
+    const res = await request.get(API_URL + '/auth/me');
     expect(res.status()).toBe(401);
     const body = (await res.json()) as { success: boolean; error: { code: string } };
     expect(body.success).toBe(false);

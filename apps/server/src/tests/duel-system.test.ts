@@ -3,6 +3,7 @@ import request from 'supertest';
 import { ProgrammingLanguage } from '@prisma/client';
 import { createApp } from '../app/create-app.js';
 import { prisma } from '../shared/lib/prisma.js';
+import { createDuelSubmission, expireStaleDuels } from '../modules/duels/duel.service.js';
 
 interface ApiBody<T = Record<string, unknown>> {
   success: boolean;
@@ -115,5 +116,112 @@ describe('Duel lobby and submissions', () => {
       .send({ language: 'PYTHON', sourceCode: 'print(1)' });
     expect(submitted.status).toBe(202);
     expect(body<{ submission: { duelId: string } }>(submitted).data.submission.duelId).toBe(duelId);
+  });
+});
+
+describe('Duel expiry', () => {
+  const expiryEmails = [
+    `duel_exp_a_${String(stamp)}@example.com`,
+    `duel_exp_b_${String(stamp)}@example.com`,
+  ];
+  let creator: TokenUser;
+  let opponent: TokenUser;
+  let challengeId = '';
+  const created: string[] = [];
+
+  beforeAll(async () => {
+    const [a, b] = await Promise.all([
+      request(app)
+        .post('/api/v1/auth/register')
+        .send({
+          email: expiryEmails[0],
+          username: `duel_exp_a_${String(stamp).slice(-8)}`,
+          password,
+        }),
+      request(app)
+        .post('/api/v1/auth/register')
+        .send({
+          email: expiryEmails[1],
+          username: `duel_exp_b_${String(stamp).slice(-8)}`,
+          password,
+        }),
+    ]);
+    creator = body<TokenUser>(a).data;
+    opponent = body<TokenUser>(b).data;
+    const challenge = await prisma.challenge.create({
+      data: {
+        slug: `duel-expiry-${String(stamp)}`,
+        title: 'Duel expiry challenge',
+        statement: 'Print a value.',
+        difficulty: 'EASY',
+        type: 'ALGORITHMS',
+        supportedLanguages: [ProgrammingLanguage.PYTHON],
+        isPublished: true,
+      },
+    });
+    challengeId = challenge.id;
+  });
+
+  afterAll(async () => {
+    await prisma.duelMatch.deleteMany({ where: { id: { in: created } } }).catch(() => undefined);
+    if (challengeId)
+      await prisma.challenge.delete({ where: { id: challengeId } }).catch(() => undefined);
+    await prisma.user.deleteMany({ where: { email: { in: expiryEmails } } }).catch(() => undefined);
+  });
+
+  it('cancels a stale open lobby and a stale active duel, leaving fresh ones alone', async () => {
+    const longAgo = new Date(Date.now() - 3 * 24 * 60 * 60 * 1000);
+    const runningLongAgo = new Date(Date.now() - 2 * 60 * 60 * 1000);
+
+    const staleOpen = await prisma.duelMatch.create({
+      data: { creatorId: creator.user.id, challengeId, status: 'OPEN', createdAt: longAgo },
+    });
+    const staleActive = await prisma.duelMatch.create({
+      data: {
+        creatorId: creator.user.id,
+        opponentId: opponent.user.id,
+        challengeId,
+        status: 'ACTIVE',
+        startedAt: runningLongAgo,
+        createdAt: runningLongAgo,
+      },
+    });
+    const freshOpen = await prisma.duelMatch.create({
+      data: { creatorId: creator.user.id, challengeId, status: 'OPEN' },
+    });
+    created.push(staleOpen.id, staleActive.id, freshOpen.id);
+
+    const cancelled = await expireStaleDuels();
+    expect(cancelled).toBeGreaterThanOrEqual(2);
+
+    const afterStaleOpen = await prisma.duelMatch.findUnique({ where: { id: staleOpen.id } });
+    const afterStaleActive = await prisma.duelMatch.findUnique({ where: { id: staleActive.id } });
+    const afterFresh = await prisma.duelMatch.findUnique({ where: { id: freshOpen.id } });
+    expect(afterStaleOpen?.status).toBe('CANCELLED');
+    expect(afterStaleOpen?.completedAt).not.toBeNull();
+    expect(afterStaleActive?.status).toBe('CANCELLED');
+    expect(afterFresh?.status).toBe('OPEN');
+  });
+
+  it('refuses a submission to an expired active duel', async () => {
+    const expired = await prisma.duelMatch.create({
+      data: {
+        creatorId: creator.user.id,
+        opponentId: opponent.user.id,
+        challengeId,
+        status: 'ACTIVE',
+        startedAt: new Date(Date.now() - 2 * 60 * 60 * 1000),
+        createdAt: new Date(Date.now() - 2 * 60 * 60 * 1000),
+      },
+    });
+    created.push(expired.id);
+
+    const submission = await createDuelSubmission(
+      creator.user.id,
+      expired.id,
+      ProgrammingLanguage.PYTHON,
+      'print(1)',
+    );
+    expect(submission).toBeNull();
   });
 });

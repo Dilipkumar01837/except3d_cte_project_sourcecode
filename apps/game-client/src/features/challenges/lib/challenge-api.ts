@@ -75,6 +75,25 @@ export interface AiErrorHint {
   hint: string;
   suggestedFix?: string;
 }
+export interface HintOutcome {
+  resolvedAfter: boolean;
+  helpful: boolean | null;
+}
+export interface HintQuota {
+  limit: number;
+  used: number;
+  remaining: number;
+  resetAt: string;
+}
+export interface AiHintResult extends HintOutcome {
+  hint: string;
+  hintId: string;
+  quota: HintQuota;
+}
+export interface AiErrorHintResult extends HintOutcome, AiErrorHint {
+  hintId: string;
+  quota: HintQuota;
+}
 export interface SubmissionDetail extends Submission {
   compilerOutput: string | null;
   runtimeOutput: string | null;
@@ -126,13 +145,13 @@ export const challengeApi = {
   async hint(
     slug: string,
     level: number,
-  ): Promise<{ content: string; xpPenalty: number; alreadyRevealed: boolean }> {
-    return dataOf<{ hint: { content: string; xpPenalty: number; alreadyRevealed: boolean } }>(
-      await apiClient.get(`/challenges/${encodeURIComponent(slug)}/hints/${String(level)}`),
-    ).hint;
+  ): Promise<{ content: string; xpPenalty: number; alreadyRevealed: boolean } & HintOutcome> {
+    return dataOf<{
+      hint: { content: string; xpPenalty: number; alreadyRevealed: boolean } & HintOutcome;
+    }>(await apiClient.get(`/challenges/${encodeURIComponent(slug)}/hints/${String(level)}`)).hint;
   },
-  async aiHint(slug: string, language: Language, sourceCode: string): Promise<string> {
-    return dataOf<{ hint: string }>(
+  async aiHint(slug: string, language: Language, sourceCode: string): Promise<AiHintResult> {
+    return dataOf<{ hint: AiHintResult }>(
       await apiClient.post(`/challenges/${encodeURIComponent(slug)}/hints/ai`, {
         language,
         sourceCode,
@@ -144,8 +163,8 @@ export const challengeApi = {
     language: Language,
     sourceCode: string,
     diagnostic: ExecutionDiagnostic,
-  ): Promise<AiErrorHint> {
-    return dataOf<{ hint: AiErrorHint }>(
+  ): Promise<AiErrorHintResult> {
+    return dataOf<{ hint: AiErrorHintResult }>(
       await apiClient.post(`/challenges/${encodeURIComponent(slug)}/hints/ai-error`, {
         language,
         sourceCode,
@@ -155,5 +174,17 @@ export const challengeApi = {
         column: diagnostic.column,
       }),
     ).hint;
+  },
+  async aiHintFeedback(slug: string, hintId: string, helpful: boolean): Promise<void> {
+    await apiClient.post(
+      `/challenges/${encodeURIComponent(slug)}/hints/ai/${encodeURIComponent(hintId)}/feedback`,
+      { helpful },
+    );
+  },
+  async hintFeedback(slug: string, level: number, helpful: boolean): Promise<void> {
+    await apiClient.post(
+      `/challenges/${encodeURIComponent(slug)}/hints/${String(level)}/feedback`,
+      { helpful },
+    );
   },
 };

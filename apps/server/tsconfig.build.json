@@ -1,0 +1,5 @@
+{
+  "//": "Build-only project. Tests are typechecked and linted via tsconfig.json but must not be emitted into dist/, otherwise the production image ships vitest, supertest and the test suite.",
+  "extends": "./tsconfig.json",
+  "exclude": ["src/tests"]
+}

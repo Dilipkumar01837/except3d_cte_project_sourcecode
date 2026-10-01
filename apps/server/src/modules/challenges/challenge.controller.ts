@@ -1,9 +1,11 @@
 import type { Request, Response } from 'express';
 import { ProgrammingLanguage } from '@prisma/client';
+import { env } from '../../config/index.js';
 import { prisma } from '../../shared/lib/prisma.js';
 import { sendError, sendSuccess } from '../../shared/lib/response.js';
 import { enqueueSubmission } from './execution.queue.js';
 import { executeWithRunner, JudgeServiceError } from './judge-execution.js';
+import { getHintQuota } from './hint-quota.js';
 import { AiHintUnavailableError, generateAiErrorHint, generateAiHint } from './ai-hint.service.js';
 
 function playerId(req: Request, res: Response): string | undefined {
@@ -103,14 +105,20 @@ export async function getHint(req: Request, res: Response): Promise<void> {
   // a single time even if the player double-clicks or re-requests the level.
   const existing = await prisma.playerHintReveal.findUnique({
     where: { userId_hintId: { userId: id, hintId: hint.id } },
-    select: { id: true },
+    select: { id: true, resolvedAfter: true, helpful: true },
   });
   const alreadyRevealed = existing !== null;
   if (!alreadyRevealed) {
     await prisma.playerHintReveal.create({ data: { userId: id, hintId: hint.id } });
   }
   sendSuccess(res, {
-    hint: { content: hint.content, xpPenalty: hint.xpPenalty, alreadyRevealed },
+    hint: {
+      content: hint.content,
+      xpPenalty: hint.xpPenalty,
+      alreadyRevealed,
+      resolvedAfter: existing?.resolvedAfter ?? false,
+      helpful: existing?.helpful ?? null,
+    },
   });
 }
 
@@ -139,21 +147,41 @@ export async function getAiHint(req: Request, res: Response): Promise<void> {
     sendError(res, 404, 'NOT_FOUND', 'Challenge not found');
     return;
   }
+  const quota = await getHintQuota(id, {
+    windowMs: env.aiHintWindowMs,
+    limit: env.aiHintDailyLimit,
+  });
+  if (quota.remaining <= 0) {
+    sendError(
+      res,
+      429,
+      'HINT_QUOTA_EXCEEDED',
+      `You have used all ${String(quota.limit)} AI hints for now. Try again after ${quota.resetAt.toISOString()}.`,
+    );
+    return;
+  }
   try {
     const hint = await generateAiHint({
       statement: challenge.statement,
       language: body.language,
       sourceCode: body.sourceCode,
     });
-    await prisma.aiHintHistory.create({
+    const record = await prisma.aiHintHistory.create({
       data: {
         userId: id,
         challengeId: challenge.id,
         language: body.language as ProgrammingLanguage,
         hint,
       },
+      select: { id: true, resolvedAfter: true, helpful: true },
     });
-    sendSuccess(res, { hint });
+    sendSuccess(res, {
+      hint,
+      hintId: record.id,
+      resolvedAfter: record.resolvedAfter,
+      helpful: record.helpful,
+      quota: { ...quota, used: quota.used + 1, remaining: quota.remaining - 1 },
+    });
   } catch (error) {
     sendError(
       res,
@@ -201,6 +229,19 @@ export async function getAiErrorHint(req: Request, res: Response): Promise<void>
     sendError(res, 404, 'NOT_FOUND', 'Challenge not found');
     return;
   }
+  const quota = await getHintQuota(id, {
+    windowMs: env.aiHintWindowMs,
+    limit: env.aiHintDailyLimit,
+  });
+  if (quota.remaining <= 0) {
+    sendError(
+      res,
+      429,
+      'HINT_QUOTA_EXCEEDED',
+      `You have used all ${String(quota.limit)} AI hints for now. Try again after ${quota.resetAt.toISOString()}.`,
+    );
+    return;
+  }
   try {
     const hint = await generateAiErrorHint({
       statement: challenge.statement,
@@ -211,15 +252,22 @@ export async function getAiErrorHint(req: Request, res: Response): Promise<void>
       line: body.line,
       column: body.column,
     });
-    await prisma.aiHintHistory.create({
+    const record = await prisma.aiHintHistory.create({
       data: {
         userId: id,
         challengeId: challenge.id,
         language: body.language as ProgrammingLanguage,
         hint: `${hint.explanation}\n\nHint: ${hint.hint}${hint.suggestedFix ? `\n\nSuggested direction: ${hint.suggestedFix}` : ''}`,
       },
+      select: { id: true, resolvedAfter: true, helpful: true },
     });
-    sendSuccess(res, { hint });
+    sendSuccess(res, {
+      hint,
+      hintId: record.id,
+      resolvedAfter: record.resolvedAfter,
+      helpful: record.helpful,
+      quota: { ...quota, used: quota.used + 1, remaining: quota.remaining - 1 },
+    });
   } catch (error) {
     sendError(
       res,
@@ -230,6 +278,62 @@ export async function getAiErrorHint(req: Request, res: Response): Promise<void>
         : 'AI hints are temporarily unavailable.',
     );
   }
+}
+
+/** Records a player's self-report that an AI hint was or was not helpful. */
+export async function submitAiHintFeedback(req: Request, res: Response): Promise<void> {
+  const id = playerId(req, res);
+  const hintId = stringParam(req, res, 'hintId');
+  const body = req.body as { helpful?: unknown };
+  if (!id || !hintId) return;
+  if (typeof body.helpful !== 'boolean') {
+    sendError(res, 400, 'VALIDATION_ERROR', 'helpful must be a boolean');
+    return;
+  }
+  const result = await prisma.aiHintHistory.updateMany({
+    where: { id: hintId, userId: id },
+    data: { helpful: body.helpful },
+  });
+  if (result.count === 0) {
+    sendError(res, 404, 'NOT_FOUND', 'Hint not found');
+    return;
+  }
+  sendSuccess(res, { hintId, helpful: body.helpful });
+}
+
+/** Records a player's self-report that a revealed static hint was or was not helpful. */
+export async function submitHintFeedback(req: Request, res: Response): Promise<void> {
+  const id = playerId(req, res);
+  const slug = stringParam(req, res, 'slug');
+  const levelParam = stringParam(req, res, 'level');
+  const body = req.body as { helpful?: unknown };
+  if (!id || !slug || !levelParam) return;
+  const level = Number.parseInt(levelParam, 10);
+  if (!Number.isInteger(level) || level < 1) {
+    sendError(res, 400, 'VALIDATION_ERROR', 'Invalid hint level');
+    return;
+  }
+  if (typeof body.helpful !== 'boolean') {
+    sendError(res, 400, 'VALIDATION_ERROR', 'helpful must be a boolean');
+    return;
+  }
+  const hint = await prisma.challengeHint.findFirst({
+    where: { level, challenge: { slug, isPublished: true } },
+    select: { id: true },
+  });
+  if (!hint) {
+    sendError(res, 404, 'NOT_FOUND', 'Hint not found');
+    return;
+  }
+  const result = await prisma.playerHintReveal.updateMany({
+    where: { userId: id, hintId: hint.id },
+    data: { helpful: body.helpful },
+  });
+  if (result.count === 0) {
+    sendError(res, 404, 'NOT_FOUND', 'Hint has not been revealed');
+    return;
+  }
+  sendSuccess(res, { level, helpful: body.helpful });
 }
 
 /** Persists an immutable submission and atomically schedules it for the isolated worker. */
@@ -253,7 +357,7 @@ export async function createSubmission(req: Request, res: Response): Promise<voi
   });
   try {
     await enqueueSubmission(submission.id);
-  } catch (error) {
+  } catch {
     await prisma.submission.update({
       where: { id: submission.id },
       data: {
@@ -262,7 +366,6 @@ export async function createSubmission(req: Request, res: Response): Promise<voi
         completedAt: new Date(),
       },
     });
-    throw error;
   }
   sendSuccess(res, { submission }, 202);
 }
@@ -366,7 +469,21 @@ export async function getSubmission(req: Request, res: Response): Promise<void> 
           testCase: { isHidden: true },
         },
   );
-  sendSuccess(res, { submission: { ...submission, results } });
+  // Compiler/runtime logs are program-controlled output and can contain a hidden
+  // test's stdin (e.g. a program that echoes its input to stderr before failing).
+  // They are therefore withheld whenever any hidden case failed, so the hidden
+  // set cannot be recovered from a failing run.
+  const failedHiddenCase = submission.results.some(
+    (result) => !visibleCaseIds.has(result.testCaseId) && !result.passed,
+  );
+  const { compilerOutput, runtimeOutput, ...safeSubmission } = submission;
+  sendSuccess(res, {
+    submission: {
+      ...safeSubmission,
+      ...(failedHiddenCase ? {} : { compilerOutput, runtimeOutput }),
+      results,
+    },
+  });
 }
 
 /** Lightweight polling endpoint. It deliberately omits code, logs and test-level detail. */

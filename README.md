@@ -26,7 +26,6 @@ packages/
   types/                Shared TypeScript types
   utils/                Pure utility functions
   ui/                   Shared React UI components
-  game-engine/          Game logic (XP, levelling)
   config/               Shared ESLint + TypeScript configs
 database/
   prisma/               Schema and database migrations
@@ -76,10 +75,13 @@ Open separate terminals for the API, worker, game client, and admin dashboard:
 # Terminal 1 — API server
 pnpm --filter @code-to-escape/server dev
 
-# Terminal 2 — Game client
+# Terminal 2 — execution worker (required for submissions to be judged)
+pnpm dev:worker
+
+# Terminal 3 — Game client
 pnpm --filter @code-to-escape/game-client dev
 
-# Terminal 3 — Admin dashboard
+# Terminal 4 — Admin dashboard
 pnpm --filter @code-to-escape/admin-dashboard dev
 ```
 
@@ -97,13 +99,17 @@ pnpm dev
 | Health check    | http://localhost:3000/api/v1/health           |
 | Readiness       | http://localhost:3000/api/v1/health/readiness |
 
-### 5 — (Optional) Start execution worker
+### 5 — Start the execution worker
 
-Required to actually run submitted code:
+Not optional. Without it, submissions are enqueued to Redis and stay `QUEUED` forever,
+because the API process never executes player code itself:
 
 ```bash
-pnpm --filter @code-to-escape/server worker
+pnpm dev:worker
 ```
+
+The worker is already running if you started the stack with `docker compose up -d`, which
+launches `server` and `worker` together.
 
 ---
 
@@ -112,9 +118,12 @@ pnpm --filter @code-to-escape/server worker
 | Script                                      | Description                        |
 | ------------------------------------------- | ---------------------------------- |
 | `pnpm dev`                                  | Start all apps in development mode |
+| `pnpm dev:worker`                           | Start the execution worker         |
 | `pnpm build`                                | Build all packages and apps        |
 | `pnpm lint`                                 | Run ESLint across the monorepo     |
 | `pnpm typecheck`                            | TypeScript type-check all packages |
+| `pnpm test`                                 | Run all package tests              |
+| `pnpm test:e2e`                             | Run the Playwright E2E suite       |
 | `pnpm --filter @code-to-escape/server test` | Run server tests with Vitest       |
 | `pnpm db:generate`                          | Generate Prisma client             |
 | `pnpm db:migrate`                           | Apply pending migrations           |
@@ -217,19 +226,20 @@ pnpm test:e2e
 
 ## Tech Stack
 
-| Layer         | Technology                                                                          |
-| ------------- | ----------------------------------------------------------------------------------- |
-| Frontend      | React 19, Vite, TypeScript, Tailwind CSS, Framer Motion, Zustand, React Three Fiber |
-| Code editor   | Monaco Editor (npm, lazy-loaded)                                                    |
-| Backend       | Node.js, Express, TypeScript, Socket.IO                                             |
-| Database      | PostgreSQL 16, Prisma ORM                                                           |
-| Cache / Queue | Redis 7, ioredis                                                                    |
-| Auth          | JWT (access + refresh rotation), bcrypt, OAuth 2.0                                  |
-| AI hints      | Groq chat completions API (optional)                                                |
-| Code runner   | Docker, custom sandbox image                                                        |
-| Monorepo      | pnpm workspaces, Turborepo                                                          |
-| Testing       | Vitest (unit), Playwright (E2E)                                                     |
-| CI            | GitHub Actions                                                                      |
+| Layer         | Technology                                                                     |
+| ------------- | ------------------------------------------------------------------------------ |
+| Frontend      | React 19, Vite, TypeScript, Tailwind CSS, Framer Motion, Zustand, React Router |
+| Code editor   | Monaco Editor (npm, lazy-loaded)                                               |
+| Backend       | Node.js, Express, TypeScript, Socket.IO                                        |
+| Worker        | Separate Node process draining the Redis execution queue                       |
+| Database      | PostgreSQL 16, Prisma ORM                                                      |
+| Cache / Queue | Redis 7, ioredis                                                               |
+| Auth          | JWT (access + refresh rotation), bcrypt, OAuth 2.0                             |
+| AI hints      | Groq chat completions API (optional)                                           |
+| Code runner   | Docker, custom sandbox image                                                   |
+| Monorepo      | pnpm workspaces, Turborepo                                                     |
+| Testing       | Vitest (unit), Playwright (E2E)                                                |
+| CI            | GitHub Actions                                                                 |
 
 ---
 
@@ -239,4 +249,31 @@ Private — graduation project.
 
 ## Current Scope
 
-The current implementation is a browser-based gamified learning prototype. It does not include a native React Native application, 3D escape-room scenes, friends or matchmaking, or research measurements proving learning-outcome improvements. Duel mode currently records the first accepted solution as the winner; detailed timed score comparison is not part of the current API.
+The current implementation is a browser-based gamified learning prototype. It does not
+include a native React Native application, 3D escape-room scenes, friends or matchmaking,
+or research measurements proving learning-outcome improvements. Duel mode currently records
+the first accepted solution as the winner; detailed timed score comparison is not part of the
+current API.
+
+### Running a submission
+
+A submission is a two-process operation, and this is the most common way to get stuck:
+
+1. `POST /challenges/:slug/submissions` enqueues a job in Redis and returns `202`.
+2. The **worker** pops the job, POSTs it to the code runner, and writes the verdict.
+
+If the worker is not running, submissions stay `QUEUED` forever and no result is ever
+recorded. This is the expected behaviour, not a bug, and there is no in-process fallback —
+the judge reports a real error rather than inventing a verdict.
+
+```bash
+# Terminal 1 - dependencies
+docker compose up -d postgres redis code-runner
+
+# Terminal 2 - API
+pnpm --filter @code-to-escape/server dev
+
+# Terminal 3 - worker (required for submissions to be judged)
+pnpm dev:worker
+# or let Compose run both: docker compose up -d server worker
+```

@@ -4,10 +4,12 @@ import { env } from '../../config/index.js';
 export const redis = new Redis(env.redisUrl, {
   connectTimeout: 2_000,
   maxRetriesPerRequest: 1,
+  enableOfflineQueue: false,
   lazyConnect: true,
-  retryStrategy: () => {
-    return null;
-  },
+  // Reconnect with capped backoff. Returning null would permanently abandon the
+  // connection after a single failure, so a transient Redis restart left the
+  // execution queue dead for the remaining lifetime of the process.
+  retryStrategy: (times) => Math.min(times * 200, 5_000),
 });
 
 // Attach an error listener so connection failures don't become unhandled

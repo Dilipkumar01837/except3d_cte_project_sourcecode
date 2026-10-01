@@ -30,6 +30,14 @@ import {
   createAdminLevel,
   updateAdminLevel,
   deleteAdminLevel,
+  listAdminRoomKeys,
+  createAdminRoomKey,
+  updateAdminRoomKey,
+  deleteAdminRoomKey,
+  listAdminRoomLocks,
+  createAdminRoomLock,
+  updateAdminRoomLock,
+  deleteAdminRoomLock,
   listAdminAchievements,
   createAdminAchievement,
   updateAdminAchievement,
@@ -46,6 +54,10 @@ import type {
   UpdateWorldInput,
   CreateLevelInput,
   UpdateLevelInput,
+  CreateRoomKeyInput,
+  UpdateRoomKeyInput,
+  CreateRoomLockInput,
+  UpdateRoomLockInput,
   CreateAchievementInput,
   UpdateAchievementInput,
 } from './admin.schema.js';
@@ -55,6 +67,13 @@ function adminId(req: Request): string {
   const sub = req.user?.sub;
   if (!sub) throw Object.assign(new Error('Not authenticated'), { statusCode: 401 });
   return sub;
+}
+
+/** The authenticated admin's own role, used for privilege-escalation guards. */
+function actingRole(req: Request): UserRole {
+  const role = req.user?.role;
+  if (!role) throw Object.assign(new Error('Not authenticated'), { statusCode: 401 });
+  return role;
 }
 
 function qNum(req: Request, key: string, def: number, max?: number): number {
@@ -196,7 +215,7 @@ export async function updateUserRoleHandler(req: Request, res: Response): Promis
     return;
   }
   const { role } = req.body as { role: UserRole };
-  await updateUserRole(id, role, adminId(req));
+  await updateUserRole(id, role, adminId(req), actingRole(req));
   sendSuccess(res, { message: 'Role updated' });
 }
 
@@ -207,7 +226,7 @@ export async function suspendUserHandler(req: Request, res: Response): Promise<v
     return;
   }
   const { reason } = req.body as { reason?: string };
-  await suspendUser(id, reason, adminId(req));
+  await suspendUser(id, reason, adminId(req), actingRole(req));
   sendSuccess(res, { message: 'User suspended' });
 }
 
@@ -217,7 +236,7 @@ export async function reactivateUserHandler(req: Request, res: Response): Promis
     sendError(res, 400, 'VALIDATION_ERROR', 'Missing user id');
     return;
   }
-  await reactivateUser(id, adminId(req));
+  await reactivateUser(id, adminId(req), actingRole(req));
   sendSuccess(res, { message: 'User reactivated' });
 }
 
@@ -416,6 +435,84 @@ export async function deleteLevelHandler(req: Request, res: Response): Promise<v
   }
   await deleteAdminLevel(id);
   sendSuccess(res, { message: 'Level deleted' });
+}
+
+// ── Escape room keys and locks ─────────────────────────────────────────
+
+export async function listRoomKeysHandler(req: Request, res: Response): Promise<void> {
+  const worldId = param(req, 'id');
+  if (!worldId) {
+    sendError(res, 400, 'VALIDATION_ERROR', 'Missing world id');
+    return;
+  }
+  sendSuccess(res, { keys: await listAdminRoomKeys(worldId) });
+}
+
+export async function createRoomKeyHandler(req: Request, res: Response): Promise<void> {
+  const worldId = param(req, 'id');
+  if (!worldId) {
+    sendError(res, 400, 'VALIDATION_ERROR', 'Missing world id');
+    return;
+  }
+  const key = await createAdminRoomKey(worldId, req.body as CreateRoomKeyInput);
+  sendSuccess(res, { key }, 201);
+}
+
+export async function updateRoomKeyHandler(req: Request, res: Response): Promise<void> {
+  const id = param(req, 'keyId');
+  if (!id) {
+    sendError(res, 400, 'VALIDATION_ERROR', 'Missing key id');
+    return;
+  }
+  sendSuccess(res, { key: await updateAdminRoomKey(id, req.body as UpdateRoomKeyInput) });
+}
+
+export async function deleteRoomKeyHandler(req: Request, res: Response): Promise<void> {
+  const id = param(req, 'keyId');
+  if (!id) {
+    sendError(res, 400, 'VALIDATION_ERROR', 'Missing key id');
+    return;
+  }
+  await deleteAdminRoomKey(id);
+  sendSuccess(res, { message: 'Key deleted' });
+}
+
+export async function listRoomLocksHandler(req: Request, res: Response): Promise<void> {
+  const worldId = param(req, 'id');
+  if (!worldId) {
+    sendError(res, 400, 'VALIDATION_ERROR', 'Missing world id');
+    return;
+  }
+  sendSuccess(res, { locks: await listAdminRoomLocks(worldId) });
+}
+
+export async function createRoomLockHandler(req: Request, res: Response): Promise<void> {
+  const worldId = param(req, 'id');
+  if (!worldId) {
+    sendError(res, 400, 'VALIDATION_ERROR', 'Missing world id');
+    return;
+  }
+  const lock = await createAdminRoomLock(worldId, req.body as CreateRoomLockInput);
+  sendSuccess(res, { lock }, 201);
+}
+
+export async function updateRoomLockHandler(req: Request, res: Response): Promise<void> {
+  const id = param(req, 'lockId');
+  if (!id) {
+    sendError(res, 400, 'VALIDATION_ERROR', 'Missing lock id');
+    return;
+  }
+  sendSuccess(res, { lock: await updateAdminRoomLock(id, req.body as UpdateRoomLockInput) });
+}
+
+export async function deleteRoomLockHandler(req: Request, res: Response): Promise<void> {
+  const id = param(req, 'lockId');
+  if (!id) {
+    sendError(res, 400, 'VALIDATION_ERROR', 'Missing lock id');
+    return;
+  }
+  await deleteAdminRoomLock(id);
+  sendSuccess(res, { message: 'Lock deleted' });
 }
 
 // ─── Achievements ─────────────────────────────────────────────────

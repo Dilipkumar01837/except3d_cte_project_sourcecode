@@ -19,6 +19,12 @@ import { requestLogger } from '../shared/middleware/request-logger.js';
 export function createApp(): ReturnType<typeof express> {
   const app = express();
 
+  // Without this, req.ip resolves to the reverse proxy for every client, so all
+  // rate-limit buckets collapse into one shared counter and a single client can
+  // lock out every user. Only the configured number of hops is trusted, so a
+  // client cannot spoof X-Forwarded-For to bypass IP rate limits.
+  app.set('trust proxy', env.trustProxyHops);
+
   // Security headers — helmet sets X-Content-Type-Options, X-Frame-Options, etc.
   // We add an explicit CSP for the API (no browser presentation so restrictive is fine).
   app.use(

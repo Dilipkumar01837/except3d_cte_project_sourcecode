@@ -88,6 +88,36 @@ export const createLevelSchema = z.object({
 
 export const updateLevelSchema = createLevelSchema.partial();
 
+// Escape room: keys and the locks they open.
+
+export const createRoomKeySchema = z.object({
+  slug: z
+    .string()
+    .min(2)
+    .max(100)
+    .regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/, 'Use lowercase words separated by single hyphens'),
+  title: z.string().min(2).max(200),
+  description: z.string().min(5),
+  artKey: z.string().min(1).max(100).optional().nullable(),
+  /** Level that awards this key when completed. Required: an unreachable key
+   *  is content nobody can ever obtain. */
+  grantedByLevelId: z.string().uuid(),
+  isPublished: z.boolean().default(false),
+});
+
+export const updateRoomKeySchema = createRoomKeySchema.partial().omit({ slug: true });
+
+export const createRoomLockSchema = z.object({
+  /** The level this lock guards. Exactly one lock per level. */
+  levelId: z.string().uuid(),
+  title: z.string().min(2).max(200),
+  prompt: z.string().min(5),
+  requiresKeyId: z.string().uuid(),
+  isPublished: z.boolean().default(false),
+});
+
+export const updateRoomLockSchema = createRoomLockSchema.partial().omit({ levelId: true });
+
 export const createAchievementSchema = z.object({
   slug: z.string().min(2).max(100),
   name: z.string().min(2).max(200),
@@ -113,5 +143,9 @@ export type CreateWorldInput = z.infer<typeof createWorldSchema>;
 export type UpdateWorldInput = z.infer<typeof updateWorldSchema>;
 export type CreateLevelInput = z.infer<typeof createLevelSchema>;
 export type UpdateLevelInput = z.infer<typeof updateLevelSchema>;
+export type CreateRoomKeyInput = z.infer<typeof createRoomKeySchema>;
+export type UpdateRoomKeyInput = z.infer<typeof updateRoomKeySchema>;
+export type CreateRoomLockInput = z.infer<typeof createRoomLockSchema>;
+export type UpdateRoomLockInput = z.infer<typeof updateRoomLockSchema>;
 export type CreateAchievementInput = z.infer<typeof createAchievementSchema>;
 export type UpdateAchievementInput = z.infer<typeof updateAchievementSchema>;

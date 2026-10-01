@@ -123,9 +123,11 @@ export async function executeWithRunner(input: JudgeExecutionInput): Promise<Jud
         memoryLimitMb: input.memoryLimitMb,
         testCases: input.testCases,
       }),
-      signal: AbortSignal.timeout(input.timeLimitMs * input.testCases.length + 5_000),
+      signal: AbortSignal.timeout(input.timeLimitMs * input.testCases.length + 30_000),
     });
   } catch (error) {
+    // Transport failure is never papered over with a synthetic verdict.
+    // Tests must inject a fetch stub; production must surface the failure.
     throw new JudgeServiceError(
       error instanceof Error ? error.message : 'Execution service unavailable',
     );

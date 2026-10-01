@@ -22,7 +22,7 @@ pnpm --filter @code-to-escape/admin-dashboard dev
 ## Health Check
 
 ```bash
-curl http://localhost:3001/api/v1/health
+curl http://localhost:3000/api/v1/health
 ```
 
 Expected response:

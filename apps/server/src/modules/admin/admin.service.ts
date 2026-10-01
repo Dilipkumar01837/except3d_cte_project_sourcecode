@@ -1,6 +1,7 @@
 import { type UserRole } from '@prisma/client';
 import { prisma } from '../../shared/lib/prisma.js';
 import { writeAudit } from '../../shared/lib/audit.js';
+import { disconnectUserSockets } from '../../shared/lib/socket.js';
 import type {
   CreateChallengeInput,
   UpdateChallengeInput,
@@ -12,6 +13,10 @@ import type {
   UpdateWorldInput,
   CreateLevelInput,
   UpdateLevelInput,
+  CreateRoomKeyInput,
+  UpdateRoomKeyInput,
+  CreateRoomLockInput,
+  UpdateRoomLockInput,
   CreateAchievementInput,
   UpdateAchievementInput,
 } from './admin.schema.js';
@@ -140,16 +145,41 @@ export async function getUserById(id: string) {
   return { user, submissionCount, achievementCount };
 }
 
-export async function updateUserRole(id: string, role: UserRole, adminId: string): Promise<void> {
+export async function updateUserRole(
+  id: string,
+  role: UserRole,
+  adminId: string,
+  actingRole: UserRole,
+): Promise<void> {
+  // Only a SUPER_ADMIN may grant or revoke SUPER_ADMIN. Without this an ADMIN
+  // could promote their own account and take full control of the platform.
+  if (role === 'SUPER_ADMIN' && actingRole !== 'SUPER_ADMIN') {
+    throw Object.assign(new Error('Only a super admin can grant the super admin role'), {
+      statusCode: 403,
+    });
+  }
+  if (id === adminId && role !== actingRole) {
+    throw Object.assign(new Error('You cannot change your own role'), { statusCode: 403 });
+  }
+
   const before = await prisma.user.findUnique({ where: { id }, select: { role: true } });
+  if (before?.role === 'SUPER_ADMIN' && actingRole !== 'SUPER_ADMIN') {
+    throw Object.assign(new Error('Only a super admin can change a super admin'), {
+      statusCode: 403,
+    });
+  }
+
   await prisma.$transaction([
     prisma.user.update({ where: { id }, data: { role } }),
+    // A role change must not be usable with an access token minted under the old
+    // role, so existing refresh tokens are revoked and re-login is required.
+    prisma.refreshToken.updateMany({ where: { userId: id }, data: { isRevoked: true } }),
     prisma.playerNotification.create({
       data: {
         userId: id,
         type: 'SYSTEM',
         title: 'Account role updated',
-        body: `Your account role has been changed to ${role}.`,
+        body: `Your account role has been changed to ${role}. Please sign in again.`,
         data: { adminId, action: 'ROLE_CHANGE', role },
       },
     }),
@@ -168,7 +198,19 @@ export async function suspendUser(
   id: string,
   reason: string | undefined,
   adminId: string,
+  actingRole: UserRole,
 ): Promise<void> {
+  if (id === adminId) {
+    throw Object.assign(new Error('You cannot suspend your own account'), { statusCode: 403 });
+  }
+  await assertCanTarget(id, actingRole);
+
+  // Live sockets are not covered by revoking refresh tokens: an already-connected
+  // client would keep receiving this user's private events. Drop them now instead
+  // of waiting for the access token to expire. Done before the transaction so the
+  // disconnect is not held up by a database failure.
+  disconnectUserSockets(id);
+
   await prisma.$transaction([
     prisma.user.update({ where: { id }, data: { isActive: false } }),
     prisma.refreshToken.updateMany({ where: { userId: id }, data: { isRevoked: true } }),
@@ -192,7 +234,13 @@ export async function suspendUser(
   });
 }
 
-export async function reactivateUser(id: string, adminId: string): Promise<void> {
+export async function reactivateUser(
+  id: string,
+  adminId: string,
+  actingRole: UserRole,
+): Promise<void> {
+  await assertCanTarget(id, actingRole);
+
   await prisma.$transaction([
     prisma.user.update({ where: { id }, data: { isActive: true } }),
     prisma.playerNotification.create({
@@ -206,6 +254,17 @@ export async function reactivateUser(id: string, adminId: string): Promise<void>
     }),
   ]);
   void writeAudit({ adminId, action: 'USER_REACTIVATED', targetType: 'User', targetId: id });
+}
+
+/** Guards against an ADMIN acting on a SUPER_ADMIN account. */
+async function assertCanTarget(id: string, actingRole: UserRole): Promise<void> {
+  if (actingRole === 'SUPER_ADMIN') return;
+  const target = await prisma.user.findUnique({ where: { id }, select: { role: true } });
+  if (target?.role === 'SUPER_ADMIN') {
+    throw Object.assign(new Error('Only a super admin can manage a super admin account'), {
+      statusCode: 403,
+    });
+  }
 }
 
 // ─────────────────────────────────────────────────────────────────
@@ -357,6 +416,120 @@ export async function updateAdminLevel(id: string, data: UpdateLevelInput) {
 
 export async function deleteAdminLevel(id: string): Promise<void> {
   await prisma.gameLevel.delete({ where: { id } });
+}
+
+// Escape room keys and locks
+// ─────────────────────────────────────────────────────────────────
+
+/**
+ * Rejects a key or lock whose level and key belong to different worlds. The
+ * schema cannot express this (it stores two independent ids), and getting it
+ * wrong produces a lock that can never be opened and a key awarded for a level
+ * the player may never reach, so it is checked explicitly.
+ */
+async function assertSameWorld(levelId: string, keyId: string, context: string): Promise<void> {
+  const [level, key] = await Promise.all([
+    prisma.gameLevel.findUnique({ where: { id: levelId }, select: { worldId: true } }),
+    prisma.roomKey.findUnique({ where: { id: keyId }, select: { worldId: true } }),
+  ]);
+  if (!level) {
+    throw Object.assign(new Error(`${context}: level not found`), { statusCode: 404 });
+  }
+  if (!key) {
+    throw Object.assign(new Error(`${context}: key not found`), { statusCode: 404 });
+  }
+  if (level.worldId !== key.worldId) {
+    throw Object.assign(new Error(`${context}: the level and the key are in different worlds`), {
+      statusCode: 400,
+    });
+  }
+}
+
+export async function listAdminRoomKeys(worldId: string) {
+  return prisma.roomKey.findMany({
+    where: { worldId },
+    orderBy: { slug: 'asc' },
+    include: {
+      grantedByLevel: { select: { id: true, number: true, title: true } },
+      _count: { select: { holders: true, unlocks: true } },
+    },
+  });
+}
+
+export async function createAdminRoomKey(worldId: string, data: CreateRoomKeyInput) {
+  const level = await prisma.gameLevel.findUnique({
+    where: { id: data.grantedByLevelId },
+    select: { worldId: true },
+  });
+  if (!level) {
+    throw Object.assign(new Error('Cannot create key: level not found'), { statusCode: 404 });
+  }
+  if (level.worldId !== worldId) {
+    throw Object.assign(
+      new Error('Cannot create key: the granting level is in a different world'),
+      { statusCode: 400 },
+    );
+  }
+  return prisma.roomKey.create({ data: { worldId, ...data } });
+}
+
+export async function updateAdminRoomKey(id: string, data: UpdateRoomKeyInput) {
+  if (data.grantedByLevelId) {
+    // The key is identified by the row being updated, so compare that row's
+    // world against the new granting level's world.
+    await assertSameWorld(data.grantedByLevelId, id, 'Cannot update key');
+  }
+  return prisma.roomKey.update({ where: { id }, data });
+}
+
+export async function deleteAdminRoomKey(id: string): Promise<void> {
+  // Keys cascade to holders and null out on locks, so deleting one cannot leave
+  // a dangling reference. Players simply lose the shortcut.
+  await prisma.roomKey.delete({ where: { id } });
+}
+
+export async function listAdminRoomLocks(worldId: string) {
+  return prisma.roomLock.findMany({
+    where: { worldId },
+    orderBy: { createdAt: 'asc' },
+    include: {
+      level: { select: { id: true, number: true, title: true } },
+      requiresKey: { select: { id: true, slug: true, title: true } },
+    },
+  });
+}
+
+export async function createAdminRoomLock(worldId: string, data: CreateRoomLockInput) {
+  await assertSameWorld(data.levelId, data.requiresKeyId, 'Cannot create lock');
+  const existing = await prisma.roomLock.findUnique({
+    where: { levelId: data.levelId },
+    select: { id: true },
+  });
+  if (existing) {
+    throw Object.assign(
+      new Error('Cannot create lock: this level already has one. Update it instead.'),
+      { statusCode: 409 },
+    );
+  }
+  return prisma.roomLock.create({ data: { worldId, ...data } });
+}
+
+export async function updateAdminRoomLock(id: string, data: UpdateRoomLockInput) {
+  if (data.requiresKeyId) {
+    const lock = await prisma.roomLock.findUnique({
+      where: { id },
+      select: { levelId: true },
+    });
+    if (!lock) {
+      throw Object.assign(new Error('Cannot update lock: lock not found'), { statusCode: 404 });
+    }
+    await assertSameWorld(lock.levelId, data.requiresKeyId, 'Cannot update lock');
+  }
+  return prisma.roomLock.update({ where: { id }, data });
+}
+
+export async function deleteAdminRoomLock(id: string): Promise<void> {
+  await prisma.roomLock.delete({ where: { id } });
 }
 
 // ─────────────────────────────────────────────────────────────────

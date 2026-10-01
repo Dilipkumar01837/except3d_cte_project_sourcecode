@@ -14,7 +14,14 @@
  */
 
 import { test, expect } from '@playwright/test';
-import { testEmail, testUsername, TEST_PASSWORD, registerAndLogin, logout } from './helpers';
+import {
+  testEmail,
+  testUsername,
+  TEST_PASSWORD,
+  registerAndLogin,
+  logout,
+  API_URL,
+} from './helpers';
 
 // ─── Landing page ─────────────────────────────────────────────────
 
@@ -94,7 +101,7 @@ test.describe('Login', () => {
   test.beforeAll(async ({ request }) => {
     email = testEmail();
     username = testUsername();
-    await request.post('http://localhost:3000/api/v1/auth/register', {
+    await request.post(API_URL + '/auth/register', {
       data: { email, username, password: TEST_PASSWORD },
     });
   });
@@ -135,7 +142,7 @@ test.describe('Dashboard', () => {
   test.beforeAll(async ({ request }) => {
     email = testEmail();
     username = testUsername();
-    await request.post('http://localhost:3000/api/v1/auth/register', {
+    await request.post(API_URL + '/auth/register', {
       data: { email, username, password: TEST_PASSWORD },
     });
   });
@@ -186,7 +193,7 @@ test.describe('Challenges list', () => {
   test.beforeAll(async ({ request }) => {
     email = testEmail();
     username = testUsername();
-    await request.post('http://localhost:3000/api/v1/auth/register', {
+    await request.post(API_URL + '/auth/register', {
       data: { email, username, password: TEST_PASSWORD },
     });
   });
@@ -214,7 +221,7 @@ test.describe('Profile page', () => {
   test.beforeAll(async ({ request }) => {
     email = testEmail();
     username = testUsername();
-    await request.post('http://localhost:3000/api/v1/auth/register', {
+    await request.post(API_URL + '/auth/register', {
       data: { email, username, password: TEST_PASSWORD },
     });
   });

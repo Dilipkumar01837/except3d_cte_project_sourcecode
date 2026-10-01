@@ -106,8 +106,12 @@ export async function claimDailyReward(userId: string) {
     const xpAmount = reward.xpAmount;
     const coinAmount = reward.coinAmount;
 
+    // Insert first and let the (userId, claimDate) unique constraint arbitrate.
+    // The findFirst above is only a fast path; it cannot observe a concurrent
+    // uncommitted insert, so a P2002 here is the real guard and must abort the
+    // whole transaction rather than double-paying the reward.
     await tx.playerDailyReward.create({
-      data: { userId, rewardId: reward.id },
+      data: { userId, rewardId: reward.id, claimDate: todayStart },
     });
 
     // Update profile

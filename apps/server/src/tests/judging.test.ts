@@ -52,7 +52,18 @@ const base = {
   memoryLimitMb: 128,
 };
 
-describe.skipIf(!(await runnerAvailable()))(
+// Skipping is the correct default for a machine with no sandbox, but a skip in
+// CI would make a broken judge indistinguishable from a green run. Set
+// REQUIRE_SANDBOX=1 where a runner is expected so its absence fails loudly.
+const runnerUp = await runnerAvailable();
+if (process.env['REQUIRE_SANDBOX'] === '1' && !runnerUp) {
+  throw new Error(
+    `REQUIRE_SANDBOX=1 but the code runner at ${runnerUrl} is not answering /health. ` +
+      'These tests must run rather than skip, otherwise judging has no coverage.',
+  );
+}
+
+describe.skipIf(!runnerUp)(
   'Judge regression — runner contract (requires the sandbox runner on :3002)',
   () => {
     it('rejects requests without a valid token', async () => {

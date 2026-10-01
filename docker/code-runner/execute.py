@@ -7,6 +7,13 @@ import time
 
 LIMIT = 64000
 WORK = '/work'
+# Compilation gets its own budget. Sharing the challenge's runtime limit meant a
+# correct C++/Java/Go/Rust/TS solution was reported as a timeout whenever
+# timeLimitMs was below a realistic compile time (the admin default is 2000ms).
+COMPILE_TIMEOUT_SECONDS = 20.0
+# Exit codes the kernel/cgroup uses when a process is killed for exceeding a
+# memory cgroup limit (SIGKILL => 128+9).
+OOM_EXIT_CODES = {-9, 137}
 
 BASE_ENV = {
     'PATH': '/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/local/go/bin',
@@ -108,13 +115,28 @@ def main():
             source_file.write(source)
 
         if compile_command:
-            compile_timeout = min(timeout, 10.0)
-            compiled = run(compile_command, '', compile_timeout, env=run_env)
+            try:
+                compiled = run(compile_command, '', COMPILE_TIMEOUT_SECONDS, env=run_env)
+            except subprocess.TimeoutExpired:
+                response(
+                    'COMPILATION_ERROR',
+                    started,
+                    f'Compilation exceeded {COMPILE_TIMEOUT_SECONDS:.0f}s and was stopped.',
+                )
+                return
+            if compiled.returncode in OOM_EXIT_CODES:
+                response('MEMORY_LIMIT_EXCEEDED', started, 'The compiler ran out of memory.')
+                return
             if compiled.returncode != 0:
                 response('COMPILATION_ERROR', started, compiled.stderr or compiled.stdout)
                 return
 
         executed = run(command, input_value, timeout, env=run_env)
+        if executed.returncode in OOM_EXIT_CODES:
+            # A cgroup OOM kill surfaces as a non-zero exit, not a MemoryError in
+            # this interpreter, so without this the player saw RUNTIME_ERROR.
+            response('MEMORY_LIMIT_EXCEEDED', started, '', executed.stderr or executed.stdout)
+            return
         if executed.returncode != 0:
             response('RUNTIME_ERROR', started, '', executed.stderr or executed.stdout)
             return

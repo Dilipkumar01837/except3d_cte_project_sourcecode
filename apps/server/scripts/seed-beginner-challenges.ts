@@ -8,7 +8,13 @@ import '../src/config/index.js';
 
 const prisma = new PrismaClient();
 
-type ProblemKey = 'sum-two-numbers' | 'even-or-odd' | 'largest-of-three';
+type ProblemKey =
+  | 'sum-two-numbers'
+  | 'even-or-odd'
+  | 'largest-of-three'
+  | 'count-vowels'
+  | 'reverse-string'
+  | 'factorial';
 
 type Problem = {
   key: ProblemKey;
@@ -103,6 +109,80 @@ const problems: Problem[] = [
       'Keep track of the largest value seen so far as you examine each number.',
     ],
   },
+  {
+    key: 'count-vowels',
+    title: 'Count Vowels',
+    statement:
+      'Read a line of text and print how many vowels it contains. Count a, e, i, o and u, treating uppercase and lowercase the same. The text may contain spaces.',
+    constraints: '0 <= length of the text <= 1000',
+    tags: ['beginner', 'strings', 'iteration'],
+    visible: [
+      ['hello', '2'],
+      ['AEIOU', '5'],
+      ['xyz', '0'],
+    ],
+    hidden: [
+      ['code to escape', '6'],
+      ['Rhythm', '0'],
+      ['aA', '2'],
+      ['the quick brown fox', '5'],
+      ['Programming', '3'],
+      ['why try', '0'],
+    ],
+    hints: [
+      'Look at each character and decide whether it is one of a, e, i, o, u.',
+      'Lowercase each character before comparing so uppercase vowels count too.',
+    ],
+  },
+  {
+    key: 'reverse-string',
+    title: 'Reverse a String',
+    statement: 'Read a line of text and print it in reverse order. The text may contain spaces.',
+    constraints: '0 <= length of the text <= 1000',
+    tags: ['beginner', 'strings'],
+    visible: [
+      ['hello', 'olleh'],
+      ['abc', 'cba'],
+      ['a', 'a'],
+    ],
+    hidden: [
+      ['code to escape', 'epacse ot edoc'],
+      ['12345', '54321'],
+      ['racecar', 'racecar'],
+      ['Hello World', 'dlroW olleH'],
+      ['ab', 'ba'],
+      ['ZzYy', 'yYzZ'],
+    ],
+    hints: [
+      'Think about reading the characters from the end back to the beginning.',
+      'Build the result by adding each character to the front as you iterate.',
+    ],
+  },
+  {
+    key: 'factorial',
+    title: 'Factorial',
+    statement:
+      'Read an integer n and print its factorial n!, the product of every integer from 1 to n. By definition 0! equals 1.',
+    constraints: '0 <= n <= 20',
+    tags: ['beginner', 'loops', 'arithmetic'],
+    visible: [
+      ['0', '1'],
+      ['1', '1'],
+      ['5', '120'],
+    ],
+    hidden: [
+      ['2', '2'],
+      ['3', '6'],
+      ['10', '3628800'],
+      ['20', '2432902008176640000'],
+      ['7', '5040'],
+      ['12', '479001600'],
+    ],
+    hints: [
+      'Start from 1 and multiply by every integer up to n.',
+      'Keep a running product and multiply it by the loop counter each step.',
+    ],
+  },
 ];
 
 const languageContent: LanguageContent[] = [
@@ -113,11 +193,22 @@ const languageContent: LanguageContent[] = [
       'sum-two-numbers': '# Read two integers and print their sum\n',
       'even-or-odd': '# Read an integer and print Even or Odd\n',
       'largest-of-three': '# Read three integers and print the largest\n',
+      'count-vowels':
+        '# Read a line and print the number of vowels (a, e, i, o, u).\ntext = input()\ncount = 0\n# Count the vowels in text and print the total.\nprint(count)\n',
+      'reverse-string':
+        '# Read a line and print it in reverse.\ntext = input()\n# Print the reversed text.\nprint(text)\n',
+      factorial:
+        '# Read an integer n and print n! (the factorial of n).\nn = int(input())\nresult = 1\n# Multiply the values from 2 up to n and print the result.\nprint(result)\n',
     },
     solution: {
       'sum-two-numbers': 'a, b = map(int, input().split())\nprint(a + b)\n',
       'even-or-odd': 'number = int(input())\nprint("Even" if number % 2 == 0 else "Odd")\n',
       'largest-of-three': 'a, b, c = map(int, input().split())\nprint(max(a, b, c))\n',
+      'count-vowels':
+        'text = input()\ncount = sum(1 for character in text.lower() if character in "aeiou")\nprint(count)\n',
+      'reverse-string': 'text = input()\nprint(text[::-1])\n',
+      factorial:
+        'n = int(input())\nresult = 1\nfor value in range(2, n + 1):\n    result *= value\nprint(result)\n',
     },
   },
   {
@@ -130,6 +221,12 @@ const languageContent: LanguageContent[] = [
         "const fs = require('fs');\nconst number = Number(fs.readFileSync(0, 'utf8').trim());\n// Print Even or Odd.\n",
       'largest-of-three':
         "const fs = require('fs');\nconst values = fs.readFileSync(0, 'utf8').trim().split(/\\s+/).map(Number);\n// Print the largest value.\n",
+      'count-vowels':
+        "const fs = require('fs');\nconst text = fs.readFileSync(0, 'utf8').replace(/\\r?\\n$/, '');\n// Count the vowels in text and print the total.\n",
+      'reverse-string':
+        "const fs = require('fs');\nconst text = fs.readFileSync(0, 'utf8').replace(/\\r?\\n$/, '');\n// Print the text in reverse.\n",
+      factorial:
+        "const fs = require('fs');\nconst n = Number(fs.readFileSync(0, 'utf8').trim());\n// Compute n! and print the result.\n",
     },
     solution: {
       'sum-two-numbers':
@@ -138,6 +235,12 @@ const languageContent: LanguageContent[] = [
         "const fs = require('fs');\nconst number = Number(fs.readFileSync(0, 'utf8').trim());\nconsole.log(number % 2 === 0 ? 'Even' : 'Odd');\n",
       'largest-of-three':
         "const fs = require('fs');\nconst values = fs.readFileSync(0, 'utf8').trim().split(/\\s+/).map(Number);\nconsole.log(Math.max(...values));\n",
+      'count-vowels':
+        "const fs = require('fs');\nconst text = fs.readFileSync(0, 'utf8').replace(/\\r?\\n$/, '');\nconst count = [...text.toLowerCase()].filter((character) => 'aeiou'.includes(character)).length;\nconsole.log(count);\n",
+      'reverse-string':
+        "const fs = require('fs');\nconst text = fs.readFileSync(0, 'utf8').replace(/\\r?\\n$/, '');\nconsole.log([...text].reverse().join(''));\n",
+      factorial:
+        "const fs = require('fs');\nconst n = Number(fs.readFileSync(0, 'utf8').trim());\nlet result = 1;\nfor (let value = 2; value <= n; value++) {\n  result *= value;\n}\nconsole.log(result);\n",
     },
   },
   {
@@ -150,6 +253,12 @@ const languageContent: LanguageContent[] = [
         "declare const require: (name: string) => { readFileSync: (fd: number, encoding: string) => string };\nconst fs = require('fs');\nconst number = Number(fs.readFileSync(0, 'utf8').trim());\n// Print Even or Odd.\n",
       'largest-of-three':
         "declare const require: (name: string) => { readFileSync: (fd: number, encoding: string) => string };\nconst fs = require('fs');\nconst values = fs.readFileSync(0, 'utf8').trim().split(/\\s+/).map(Number);\n// Print the largest value.\n",
+      'count-vowels':
+        "declare const require: (name: string) => { readFileSync: (fd: number, encoding: string) => string };\nconst fs = require('fs');\nconst text = fs.readFileSync(0, 'utf8').replace(/\\r?\\n$/, '');\n// Count the vowels in text and print the total.\n",
+      'reverse-string':
+        "declare const require: (name: string) => { readFileSync: (fd: number, encoding: string) => string };\nconst fs = require('fs');\nconst text = fs.readFileSync(0, 'utf8').replace(/\\r?\\n$/, '');\n// Print the text in reverse.\n",
+      factorial:
+        "declare const require: (name: string) => { readFileSync: (fd: number, encoding: string) => string };\nconst fs = require('fs');\nconst n = Number(fs.readFileSync(0, 'utf8').trim());\n// Compute n! and print the result.\n",
     },
     solution: {
       'sum-two-numbers':
@@ -158,6 +267,12 @@ const languageContent: LanguageContent[] = [
         "declare const require: (name: string) => { readFileSync: (fd: number, encoding: string) => string };\nconst fs = require('fs');\nconst number = Number(fs.readFileSync(0, 'utf8').trim());\nconsole.log(number % 2 === 0 ? 'Even' : 'Odd');\n",
       'largest-of-three':
         "declare const require: (name: string) => { readFileSync: (fd: number, encoding: string) => string };\nconst fs = require('fs');\nconst values = fs.readFileSync(0, 'utf8').trim().split(/\\s+/).map(Number);\nconsole.log(Math.max(...values));\n",
+      'count-vowels':
+        "declare const require: (name: string) => { readFileSync: (fd: number, encoding: string) => string };\nconst fs = require('fs');\nconst text = fs.readFileSync(0, 'utf8').replace(/\\r?\\n$/, '');\nconst count = [...text.toLowerCase()].filter((character) => 'aeiou'.includes(character)).length;\nconsole.log(count);\n",
+      'reverse-string':
+        "declare const require: (name: string) => { readFileSync: (fd: number, encoding: string) => string };\nconst fs = require('fs');\nconst text = fs.readFileSync(0, 'utf8').replace(/\\r?\\n$/, '');\nconsole.log([...text].reverse().join(''));\n",
+      factorial:
+        "declare const require: (name: string) => { readFileSync: (fd: number, encoding: string) => string };\nconst fs = require('fs');\nconst n = Number(fs.readFileSync(0, 'utf8').trim());\nlet result = 1;\nfor (let value = 2; value <= n; value++) {\n  result *= value;\n}\nconsole.log(result);\n",
     },
   },
   {
@@ -170,6 +285,12 @@ const languageContent: LanguageContent[] = [
         'package main\n\nimport "fmt"\n\nfunc main() {\n\tvar number int\n\tfmt.Scan(&number)\n\t// Print Even or Odd.\n}\n',
       'largest-of-three':
         'package main\n\nimport "fmt"\n\nfunc main() {\n\tvar a, b, c int\n\tfmt.Scan(&a, &b, &c)\n\t// Print the largest value.\n}\n',
+      'count-vowels':
+        'package main\n\nimport (\n\t"bufio"\n\t"os"\n\t"strings"\n)\n\nfunc main() {\n\tscanner := bufio.NewScanner(os.Stdin)\n\tscanner.Scan()\n\ttext := scanner.Text()\n\t// Count the vowels in text and print the total.\n\t_ = text\n}\n',
+      'reverse-string':
+        'package main\n\nimport (\n\t"bufio"\n\t"os"\n)\n\nfunc main() {\n\tscanner := bufio.NewScanner(os.Stdin)\n\tscanner.Scan()\n\ttext := scanner.Text()\n\t_ = text\n\t// Print the text in reverse.\n}\n',
+      factorial:
+        'package main\n\nimport "fmt"\n\nfunc main() {\n\tvar n int\n\tfmt.Scan(&n)\n\t// Compute n! and print the result.\n}\n',
     },
     solution: {
       'sum-two-numbers':
@@ -178,6 +299,12 @@ const languageContent: LanguageContent[] = [
         'package main\n\nimport "fmt"\n\nfunc main() {\n\tvar number int\n\tfmt.Scan(&number)\n\tif number%2 == 0 {\n\t\tfmt.Println("Even")\n\t} else {\n\t\tfmt.Println("Odd")\n\t}\n}\n',
       'largest-of-three':
         'package main\n\nimport "fmt"\n\nfunc main() {\n\tvar a, b, c int\n\tfmt.Scan(&a, &b, &c)\n\tlargest := a\n\tif b > largest { largest = b }\n\tif c > largest { largest = c }\n\tfmt.Println(largest)\n}\n',
+      'count-vowels':
+        'package main\n\nimport (\n\t"bufio"\n\t"fmt"\n\t"os"\n\t"strings"\n)\n\nfunc main() {\n\tscanner := bufio.NewScanner(os.Stdin)\n\tscanner.Scan()\n\ttext := scanner.Text()\n\tcount := 0\n\tfor _, character := range strings.ToLower(text) {\n\t\tif strings.ContainsRune("aeiou", character) {\n\t\t\tcount++\n\t\t}\n\t}\n\tfmt.Println(count)\n}\n',
+      'reverse-string':
+        'package main\n\nimport (\n\t"bufio"\n\t"fmt"\n\t"os"\n)\n\nfunc main() {\n\tscanner := bufio.NewScanner(os.Stdin)\n\tscanner.Scan()\n\ttext := []rune(scanner.Text())\n\tfor left, right := 0, len(text)-1; left < right; left, right = left+1, right-1 {\n\t\ttext[left], text[right] = text[right], text[left]\n\t}\n\tfmt.Println(string(text))\n}\n',
+      factorial:
+        'package main\n\nimport "fmt"\n\nfunc main() {\n\tvar n int\n\tfmt.Scan(&n)\n\tresult := int64(1)\n\tfor value := 2; value <= n; value++ {\n\t\tresult *= int64(value)\n\t}\n\tfmt.Println(result)\n}\n',
     },
   },
   {
@@ -190,6 +317,12 @@ const languageContent: LanguageContent[] = [
         'use std::io::{self, Read};\n\nfn main() {\n    let mut input = String::new();\n    io::stdin().read_to_string(&mut input).unwrap();\n    let number: i64 = input.trim().parse().unwrap();\n    // Print Even or Odd.\n}\n',
       'largest-of-three':
         'use std::io::{self, Read};\n\nfn main() {\n    let mut input = String::new();\n    io::stdin().read_to_string(&mut input).unwrap();\n    // Read three integers and print the largest.\n}\n',
+      'count-vowels':
+        'use std::io::{self, Read};\n\nfn main() {\n    let mut input = String::new();\n    io::stdin().read_to_string(&mut input).unwrap();\n    let text = input.lines().next().unwrap_or("");\n    // Count the vowels in text and print the total.\n}\n',
+      'reverse-string':
+        'use std::io::{self, Read};\n\nfn main() {\n    let mut input = String::new();\n    io::stdin().read_to_string(&mut input).unwrap();\n    let text = input.lines().next().unwrap_or("");\n    let _ = text;\n    // Print the text in reverse.\n}\n',
+      factorial:
+        'use std::io::{self, Read};\n\nfn main() {\n    let mut input = String::new();\n    io::stdin().read_to_string(&mut input).unwrap();\n    let n: i64 = input.trim().parse().unwrap();\n    // Compute n! and print the result.\n}\n',
     },
     solution: {
       'sum-two-numbers':
@@ -198,6 +331,12 @@ const languageContent: LanguageContent[] = [
         'use std::io::{self, Read};\n\nfn main() {\n    let mut input = String::new();\n    io::stdin().read_to_string(&mut input).unwrap();\n    let number: i64 = input.trim().parse().unwrap();\n    println!("{}", if number % 2 == 0 { "Even" } else { "Odd" });\n}\n',
       'largest-of-three':
         'use std::io::{self, Read};\n\nfn main() {\n    let mut input = String::new();\n    io::stdin().read_to_string(&mut input).unwrap();\n    let values: Vec<i64> = input.split_whitespace().map(|value| value.parse().unwrap()).collect();\n    println!("{}", values.iter().max().unwrap());\n}\n',
+      'count-vowels':
+        'use std::io::{self, Read};\n\nfn main() {\n    let mut input = String::new();\n    io::stdin().read_to_string(&mut input).unwrap();\n    let text = input.lines().next().unwrap_or("");\n    let count = text.chars().filter(|c| "aeiou".contains(c.to_ascii_lowercase())).count();\n    println!("{}", count);\n}\n',
+      'reverse-string':
+        'use std::io::{self, Read};\n\nfn main() {\n    let mut input = String::new();\n    io::stdin().read_to_string(&mut input).unwrap();\n    let text = input.lines().next().unwrap_or("");\n    let reversed: String = text.chars().rev().collect();\n    println!("{}", reversed);\n}\n',
+      factorial:
+        'use std::io::{self, Read};\n\nfn main() {\n    let mut input = String::new();\n    io::stdin().read_to_string(&mut input).unwrap();\n    let n: i64 = input.trim().parse().unwrap();\n    let mut result: i64 = 1;\n    for value in 2..=n {\n        result *= value;\n    }\n    println!("{}", result);\n}\n',
     },
   },
   {
@@ -210,6 +349,12 @@ const languageContent: LanguageContent[] = [
         '#include <iostream>\nusing namespace std;\n\nint main() {\n    long long number;\n    cin >> number;\n    // Print Even or Odd.\n}\n',
       'largest-of-three':
         '#include <iostream>\nusing namespace std;\n\nint main() {\n    long long a, b, c;\n    cin >> a >> b >> c;\n    // Print the largest value.\n}\n',
+      'count-vowels':
+        '#include <iostream>\n#include <cctype>\n#include <string>\nusing namespace std;\n\nint main() {\n    string text;\n    getline(cin, text);\n    // Count the vowels in text and print the total.\n}\n',
+      'reverse-string':
+        '#include <iostream>\n#include <string>\nusing namespace std;\n\nint main() {\n    string text;\n    getline(cin, text);\n    // Print the text in reverse.\n}\n',
+      factorial:
+        '#include <iostream>\nusing namespace std;\n\nint main() {\n    int n;\n    cin >> n;\n    // Compute n! and print the result.\n}\n',
     },
     solution: {
       'sum-two-numbers':
@@ -218,6 +363,12 @@ const languageContent: LanguageContent[] = [
         '#include <iostream>\nusing namespace std;\n\nint main() {\n    long long number;\n    cin >> number;\n    cout << (number % 2 == 0 ? "Even" : "Odd") << "\\n";\n}\n',
       'largest-of-three':
         '#include <iostream>\n#include <algorithm>\nusing namespace std;\n\nint main() {\n    long long a, b, c;\n    cin >> a >> b >> c;\n    cout << max(a, max(b, c)) << "\\n";\n}\n',
+      'count-vowels':
+        '#include <iostream>\n#include <cctype>\n#include <string>\nusing namespace std;\n\nint main() {\n    string text;\n    getline(cin, text);\n    int count = 0;\n    for (char character : text) {\n        char lower = static_cast<char>(tolower(static_cast<unsigned char>(character)));\n        if (string("aeiou").find(lower) != string::npos) {\n            count++;\n        }\n    }\n    cout << count << "\\n";\n    return 0;\n}\n',
+      'reverse-string':
+        '#include <iostream>\n#include <string>\n#include <algorithm>\nusing namespace std;\n\nint main() {\n    string text;\n    getline(cin, text);\n    reverse(text.begin(), text.end());\n    cout << text << "\\n";\n    return 0;\n}\n',
+      factorial:
+        '#include <iostream>\nusing namespace std;\n\nint main() {\n    int n;\n    cin >> n;\n    long long result = 1;\n    for (int value = 2; value <= n; value++) {\n        result *= value;\n    }\n    cout << result << "\\n";\n    return 0;\n}\n',
     },
   },
   {
@@ -230,6 +381,12 @@ const languageContent: LanguageContent[] = [
         'import java.util.*;\n\npublic class Main {\n    public static void main(String[] args) {\n        Scanner scanner = new Scanner(System.in);\n        int number = scanner.nextInt();\n        // Print Even or Odd.\n    }\n}\n',
       'largest-of-three':
         'import java.util.*;\n\npublic class Main {\n    public static void main(String[] args) {\n        Scanner scanner = new Scanner(System.in);\n        int a = scanner.nextInt();\n        int b = scanner.nextInt();\n        int c = scanner.nextInt();\n        // Print the largest value.\n    }\n}\n',
+      'count-vowels':
+        'import java.util.*;\n\npublic class Main {\n    public static void main(String[] args) {\n        Scanner scanner = new Scanner(System.in);\n        String text = scanner.hasNextLine() ? scanner.nextLine() : "";\n        // Count the vowels in text and print the total.\n    }\n}\n',
+      'reverse-string':
+        'import java.util.*;\n\npublic class Main {\n    public static void main(String[] args) {\n        Scanner scanner = new Scanner(System.in);\n        String text = scanner.hasNextLine() ? scanner.nextLine() : "";\n        // Print the text in reverse.\n    }\n}\n',
+      factorial:
+        'import java.util.*;\n\npublic class Main {\n    public static void main(String[] args) {\n        Scanner scanner = new Scanner(System.in);\n        int n = scanner.nextInt();\n        // Compute n! and print the result.\n    }\n}\n',
     },
     solution: {
       'sum-two-numbers':
@@ -238,6 +395,12 @@ const languageContent: LanguageContent[] = [
         'import java.util.*;\n\npublic class Main {\n    public static void main(String[] args) {\n        Scanner scanner = new Scanner(System.in);\n        long number = scanner.nextLong();\n        System.out.println(number % 2 == 0 ? "Even" : "Odd");\n    }\n}\n',
       'largest-of-three':
         'import java.util.*;\n\npublic class Main {\n    public static void main(String[] args) {\n        Scanner scanner = new Scanner(System.in);\n        long a = scanner.nextLong();\n        long b = scanner.nextLong();\n        long c = scanner.nextLong();\n        System.out.println(Math.max(a, Math.max(b, c)));\n    }\n}\n',
+      'count-vowels':
+        'import java.util.*;\n\npublic class Main {\n    public static void main(String[] args) {\n        Scanner scanner = new Scanner(System.in);\n        String text = scanner.hasNextLine() ? scanner.nextLine() : "";\n        int count = 0;\n        for (char character : text.toLowerCase().toCharArray()) {\n            if ("aeiou".indexOf(character) >= 0) {\n                count++;\n            }\n        }\n        System.out.println(count);\n    }\n}\n',
+      'reverse-string':
+        'import java.util.*;\n\npublic class Main {\n    public static void main(String[] args) {\n        Scanner scanner = new Scanner(System.in);\n        String text = scanner.hasNextLine() ? scanner.nextLine() : "";\n        System.out.println(new StringBuilder(text).reverse().toString());\n    }\n}\n',
+      factorial:
+        'import java.util.*;\n\npublic class Main {\n    public static void main(String[] args) {\n        Scanner scanner = new Scanner(System.in);\n        int n = scanner.nextInt();\n        long result = 1;\n        for (int value = 2; value <= n; value++) {\n            result *= value;\n        }\n        System.out.println(result);\n    }\n}\n',
     },
   },
 ];
@@ -327,8 +490,8 @@ async function validateSeed(): Promise<void> {
     where: { slug: { in: slugs } },
     include: { testCases: true, hints: true, solutions: true },
   });
-  if (challenges.length !== 21)
-    throw new Error(`Expected 21 beginner challenges, found ${String(challenges.length)}`);
+  if (challenges.length !== 42)
+    throw new Error(`Expected 42 beginner challenges, found ${String(challenges.length)}`);
   for (const challenge of challenges) {
     const visible = challenge.testCases.filter((testCase) => !testCase.isHidden).length;
     const hidden = challenge.testCases.filter((testCase) => testCase.isHidden).length;
@@ -349,10 +512,10 @@ async function validateSeed(): Promise<void> {
     counts.set(language, (counts.get(language) ?? 0) + 1);
   }
   for (const language of languageContent) {
-    if (counts.get(language.language) !== 3)
-      throw new Error(`Expected 3 challenges for ${language.language}`);
+    if (counts.get(language.language) !== 6)
+      throw new Error(`Expected 6 challenges for ${language.language}`);
   }
-  console.log('Validated 21 beginner challenges: 3 per language.');
+  console.log('Validated 42 beginner challenges: 6 per language.');
 }
 
 try {

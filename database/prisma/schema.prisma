@@ -1,3 +1,7 @@
+// No explicit `output`: the client must be generated into the @prisma/client
+// package that consumers actually resolve. A hardcoded path writes to
+// database/node_modules/.prisma, which pnpm's isolated store never exposes to
+// apps/server, leaving the server typechecked against a stale client.
 generator client {
   provider = "prisma-client-js"
 }
@@ -80,6 +84,7 @@ model User {
   joinedDuels    DuelMatch[] @relation("DuelOpponent")
   wonDuels       DuelMatch[] @relation("DuelWinner")
   aiHintHistory  AiHintHistory[]
+  roomKeys       PlayerRoomKey[]
 
   @@index([email])
   @@index([username])
@@ -258,6 +263,76 @@ model GameWorld {
 
   levels     GameLevel[]
   progress   PlayerWorldProgress[]
+  roomKeys   RoomKey[]
+  roomLocks  RoomLock[]
+}
+
+// ─────────────────────────────────────────────────────────────────
+// Escape room (locks and keys)
+// ─────────────────────────────────────────────────────────────────
+
+/// An item a player collects by completing a level, which opens a lock.
+///
+/// `grantedByLevelId` is what makes this an escape-room mechanic rather than a
+/// badge: the key is awarded when that level is solved, so the unlock is a
+/// consequence of playing rather than something a client can assert.
+model RoomKey {
+  id          String   @id @default(uuid())
+  worldId     String
+  slug        String   @unique
+  title       String
+  description String
+  artKey      String?
+  /// Completing this level awards the key. Unique so two levels cannot grant
+  /// the same key, which would make the award ambiguous.
+  grantedByLevelId String?  @unique
+  isPublished Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  world       GameWorld @relation(fields: [worldId], references: [id], onDelete: Cascade)
+  grantedByLevel GameLevel? @relation("grantedRoomKey", fields: [grantedByLevelId], references: [id], onDelete: SetNull)
+  unlocks     RoomLock[]
+  holders     PlayerRoomKey[]
+
+  @@index([worldId, isPublished])
+}
+
+/// A door in front of a level. The level is reachable when the player either
+/// completes the preceding level or holds the key this lock requires.
+model RoomLock {
+  id          String   @id @default(uuid())
+  worldId     String
+  /// The level this lock guards. One lock per level.
+  levelId     String   @unique
+  title       String
+  prompt      String
+  /// When set, the player must hold this key for the lock to be open.
+  requiresKeyId String?
+  isPublished Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  world       GameWorld @relation(fields: [worldId], references: [id], onDelete: Cascade)
+  level       GameLevel @relation("guardedRoomLock", fields: [levelId], references: [id], onDelete: Cascade)
+  requiresKey RoomKey?  @relation(fields: [requiresKeyId], references: [id], onDelete: SetNull)
+
+  @@unique([worldId, levelId])
+  @@index([requiresKeyId])
+}
+
+/// A key a player holds. Written by the worker when the granting level is solved.
+model PlayerRoomKey {
+  id         String   @id @default(uuid())
+  userId     String
+  keyId      String
+  acquiredAt DateTime @default(now())
+
+  user User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  key RoomKey  @relation(fields: [keyId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, keyId])
+  @@index([userId])
 }
 
 model GameLevel {
@@ -277,6 +352,12 @@ model GameLevel {
   world       GameWorld @relation(fields: [worldId], references: [id], onDelete: Cascade)
   challenge   Challenge? @relation(fields: [challengeId], references: [id], onDelete: SetNull)
   progress    PlayerLevelProgress[]
+  /// The key this level awards, if any. `grantedByLevelId` on RoomKey owns the
+  /// foreign key; this is the inverse side.
+  grantsRoomKey RoomKey? @relation("grantedRoomKey")
+  /// The lock guarding this level, if any. `levelId` on RoomLock owns the foreign
+  /// key; this is the inverse side.
+  guardedByRoomLock RoomLock? @relation("guardedRoomLock")
   @@unique([worldId, number])
   @@index([worldId, isPublished])
 }
@@ -383,8 +464,15 @@ model PlayerDailyReward {
   userId    String
   rewardId  String
   claimedAt DateTime @default(now())
+  // UTC midnight of the day the reward was claimed. The unique constraint on
+  // (userId, claimDate) is the authoritative one-claim-per-day guard: the
+  // in-transaction findFirst check below cannot see an uncommitted concurrent
+  // insert under READ COMMITTED, so without this a double-click or two tabs
+  // paid the XP and coins twice.
+  claimDate DateTime
   user      User        @relation(fields: [userId], references: [id], onDelete: Cascade)
   reward    DailyReward @relation(fields: [rewardId], references: [id], onDelete: Restrict)
+  @@unique([userId, claimDate])
   @@index([userId, claimedAt])
 }
 
@@ -459,6 +547,12 @@ model AiHintHistory {
   language    ProgrammingLanguage
   hint        String
   createdAt   DateTime @default(now())
+  // Engagement-only outcome signals (no learning-outcome claim): whether the
+  // player went on to get an accepted submission for this challenge after the
+  // hint, and an optional self-reported "was this helpful?".
+  resolvedAfter Boolean  @default(false)
+  resolvedAt    DateTime?
+  helpful       Boolean?
 
   user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
   challenge Challenge @relation(fields: [challengeId], references: [id], onDelete: Cascade)
@@ -506,6 +600,10 @@ model PlayerHintReveal {
   userId     String
   hintId     String
   revealedAt DateTime      @default(now())
+  // Same engagement-only outcome signals as AiHintHistory.
+  resolvedAfter Boolean  @default(false)
+  resolvedAt    DateTime?
+  helpful       Boolean?
   user       User          @relation(fields: [userId], references: [id], onDelete: Cascade)
   hint       ChallengeHint @relation(fields: [hintId], references: [id], onDelete: Cascade)
   @@unique([userId, hintId])

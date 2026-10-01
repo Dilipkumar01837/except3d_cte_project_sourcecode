@@ -2,7 +2,8 @@
 
 ## Overview
 
-Code to Escape is a pnpm + Turborepo monorepo with three applications and six shared packages.
+Code to Escape is a pnpm + Turborepo monorepo with five workspaces (`game-client`,
+`admin-dashboard`, `server`, `code-runner`, `e2e`) and five shared packages.
 
 ```mermaid
 flowchart TB
@@ -12,7 +13,7 @@ flowchart TB
     end
 
     subgraph Backend
-        API[server :3001]
+        API[server :3000]
         WKR[execution worker]
     end
 
@@ -42,20 +43,19 @@ flowchart TB
 | ----------------- | ---- | ------------------------------------ |
 | `game-client`     | 5173 | Player-facing Vite + React SPA       |
 | `admin-dashboard` | 5174 | Admin Vite + React SPA               |
-| `server`          | 3001 | Express API + Socket.IO              |
+| `server`          | 3000 | Express API + Socket.IO              |
 | `code-runner`     | 3002 | Internal sandboxed execution service |
 | `e2e`             | —    | Playwright end-to-end tests          |
 
 ## Shared Packages
 
-| Package                | Purpose                           |
-| ---------------------- | --------------------------------- |
-| `packages/shared`      | APP_NAME, API_BASE_PATH constants |
-| `packages/types`       | Shared TypeScript types           |
-| `packages/ui`          | Shared React UI primitives        |
-| `packages/utils`       | Pure utility functions            |
-| `packages/game-engine` | Game logic (XP, leveling)         |
-| `packages/config`      | Shared ESLint / TS configs        |
+| Package           | Purpose                           |
+| ----------------- | --------------------------------- |
+| `packages/shared` | APP_NAME, API_BASE_PATH constants |
+| `packages/types`  | Shared TypeScript types           |
+| `packages/ui`     | Shared React UI primitives        |
+| `packages/utils`  | Pure utility functions            |
+| `packages/config` | Shared ESLint / TS configs        |
 
 ## Frontend
 
@@ -65,7 +65,6 @@ flowchart TB
 - React Query for server state (planned)
 - Monaco Editor (npm package, lazy-loaded) for code editing
 - Framer Motion for animations
-- React Three Fiber / Three.js for future 3D gameplay
 
 ### Game Client Routes
 
@@ -108,16 +107,23 @@ flowchart TB
 Challenge submissions are persisted as immutable `Submission` records and their IDs are pushed
 onto Redis (`cte:execution:queue`). The HTTP service never compiles or runs player code.
 
-Run `pnpm --filter @code-to-escape/server worker` as a separate process; it:
+Run `pnpm dev:worker` (or `pnpm --filter @code-to-escape/server worker`) as a separate process;
+it:
 
-1. Dequeues submission IDs from Redis
-2. Sends code to the internal `CODE_RUNNER_URL` service
-3. Validates and bounds every value from the runner response
-4. Saves individual test results atomically via Prisma transaction
-5. Applies XP/level/coin/rank updates in the same transaction
-6. Updates the Redis leaderboard
-7. Evaluates achievement unlock conditions
-8. Emits a `submission:completed` Socket.IO event to the player
+1. Atomically claims a `QUEUED` submission via a guarded `updateMany`, so a Redis
+   redelivery or a second worker cannot judge and pay out the same submission twice
+2. Dequeues submission IDs from Redis
+3. Sends code to the internal `CODE_RUNNER_URL` service
+4. Validates and bounds every value from the runner response
+5. Saves individual test results atomically via Prisma transaction
+6. Applies XP/level/coin/rank updates in the same transaction
+7. Updates the Redis leaderboard
+8. Evaluates achievement unlock conditions
+9. Emits a `submission:completed` Socket.IO event to the player
+
+When the runner is unreachable the judge throws and the submission is recorded as
+`INTERNAL_ERROR`. There is deliberately no fallback verdict and no `NODE_ENV`-gated stub
+in production code: a green test run must never be produced by a fabricated result.
 
 The runner must be an isolated internal service with:
 

@@ -5,13 +5,61 @@ import { MonacoCodeEditor } from './MonacoCodeEditor';
 import {
   challengeApi,
   type Challenge,
-  type AiErrorHint,
+  type AiHintResult,
+  type AiErrorHintResult,
   type ExecutionDiagnostic,
   type Language,
   type RunResult,
   type Submission,
   type SubmissionDetail,
 } from '../lib/challenge-api';
+
+function HintFeedback({
+  value,
+  disabled,
+  onVote,
+}: {
+  value: boolean | null;
+  disabled?: boolean;
+  onVote: (helpful: boolean) => void;
+}) {
+  return (
+    <div className="mt-2 flex items-center gap-2 text-[11px] text-slate-400">
+      <span>Was this helpful?</span>
+      <button
+        type="button"
+        disabled={disabled}
+        aria-pressed={value === true}
+        onClick={() => {
+          onVote(true);
+        }}
+        className={`rounded border px-2 py-0.5 transition-colors disabled:opacity-50 ${
+          value === true
+            ? 'border-emerald-400/60 text-emerald-300'
+            : 'border-slate-700 hover:bg-slate-800'
+        }`}
+      >
+        Yes
+      </button>
+      <button
+        type="button"
+        disabled={disabled}
+        aria-pressed={value === false}
+        onClick={() => {
+          onVote(false);
+        }}
+        className={`rounded border px-2 py-0.5 transition-colors disabled:opacity-50 ${
+          value === false
+            ? 'border-rose-400/60 text-rose-300'
+            : 'border-slate-700 hover:bg-slate-800'
+        }`}
+      >
+        No
+      </button>
+      {value !== null && <span className="text-slate-500">Thanks</span>}
+    </div>
+  );
+}
 
 const defaultCode: Record<Language, string> = {
   PYTHON: '# Write your solution here\n',
@@ -86,15 +134,18 @@ export function ChallengePlayerPage() {
   const [run, setRun] = useState<RunResult>();
   const [diagnostics, setDiagnostics] = useState<ExecutionDiagnostic[]>([]);
   const [selectedDiagnostic, setSelectedDiagnostic] = useState<ExecutionDiagnostic>();
-  const [aiErrorHint, setAiErrorHint] = useState<AiErrorHint>();
+  const [aiErrorHint, setAiErrorHint] = useState<AiErrorHintResult>();
   const [loadingAiErrorHint, setLoadingAiErrorHint] = useState(false);
   const [aiErrorUnavailable, setAiErrorUnavailable] = useState(false);
-  const [revealed, setRevealed] = useState<Record<number, { content: string; penalty: number }>>(
-    {},
-  );
+  const [aiErrorVote, setAiErrorVote] = useState<boolean | null>(null);
+  const [revealed, setRevealed] = useState<
+    Record<number, { content: string; penalty: number; helpful?: boolean | null }>
+  >({});
   const [revealingHint, setRevealingHint] = useState<number | null>(null);
-  const [aiHint, setAiHint] = useState('');
+  const [aiHint, setAiHint] = useState<AiHintResult>();
+  const [aiHintVote, setAiHintVote] = useState<boolean | null>(null);
   const [loadingAiHint, setLoadingAiHint] = useState(false);
+  const [hintsOpen, setHintsOpen] = useState(false);
   const [fontSize, setFontSize] = useState(14);
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
@@ -201,7 +252,7 @@ export function ChallengePlayerPage() {
       const item = await challengeApi.hint(slug, level);
       setRevealed((current) => ({
         ...current,
-        [level]: { content: item.content, penalty: item.xpPenalty },
+        [level]: { content: item.content, penalty: item.xpPenalty, helpful: item.helpful },
       }));
     } catch {
       setError('Unable to reveal this hint.');
@@ -210,16 +261,42 @@ export function ChallengePlayerPage() {
     }
   };
 
+  const voteStaticHint = async (level: number, helpful: boolean) => {
+    if (!slug) return;
+    setRevealed((current) => {
+      const existing = current[level];
+      if (!existing) return current;
+      return { ...current, [level]: { ...existing, helpful } };
+    });
+    try {
+      await challengeApi.hintFeedback(slug, level, helpful);
+    } catch {
+      setError('Unable to record hint feedback.');
+    }
+  };
+
   const requestAiHint = async () => {
     if (!slug || !code.trim() || loadingAiHint) return;
     setLoadingAiHint(true);
     setError('');
     try {
-      setAiHint(await challengeApi.aiHint(slug, language, code));
+      const result = await challengeApi.aiHint(slug, language, code);
+      setAiHint(result);
+      setAiHintVote(result.helpful);
     } catch {
       setError('AI hints are unavailable. Configure GROQ_API_KEY on the server.');
     } finally {
       setLoadingAiHint(false);
+    }
+  };
+
+  const voteAiHint = async (helpful: boolean) => {
+    if (!slug || !aiHint) return;
+    setAiHintVote(helpful);
+    try {
+      await challengeApi.aiHintFeedback(slug, aiHint.hintId, helpful);
+    } catch {
+      setError('Unable to record hint feedback.');
     }
   };
 
@@ -228,11 +305,23 @@ export function ChallengePlayerPage() {
     setLoadingAiErrorHint(true);
     setAiErrorUnavailable(false);
     try {
-      setAiErrorHint(await challengeApi.aiErrorHint(slug, language, code, selectedDiagnostic));
+      const result = await challengeApi.aiErrorHint(slug, language, code, selectedDiagnostic);
+      setAiErrorHint(result);
+      setAiErrorVote(result.helpful);
     } catch {
       setAiErrorUnavailable(true);
     } finally {
       setLoadingAiErrorHint(false);
+    }
+  };
+
+  const voteAiErrorHint = async (helpful: boolean) => {
+    if (!slug || !aiErrorHint) return;
+    setAiErrorVote(helpful);
+    try {
+      await challengeApi.aiHintFeedback(slug, aiErrorHint.hintId, helpful);
+    } catch {
+      setError('Unable to record hint feedback.');
     }
   };
 
@@ -366,59 +455,6 @@ export function ChallengePlayerPage() {
                 {test.explanation && <p className="mt-2 text-slate-400">{test.explanation}</p>}
               </div>
             ))}
-          </section>
-          {challenge.hints.length > 0 && (
-            <section>
-              <h2 className="mb-2 font-semibold">Hints</h2>
-              <div className="space-y-2">
-                {challenge.hints.map((hint) => {
-                  const item = revealed[hint.level];
-                  return (
-                    <div
-                      key={hint.level}
-                      className="rounded-lg border border-slate-800 bg-slate-950 p-3"
-                    >
-                      <div className="flex items-center justify-between gap-3">
-                        <span className="text-xs font-bold text-cyan-400">Hint {hint.level}</span>
-                        {hint.xpPenalty > 0 && (
-                          <span className="text-xs text-amber-300/80">
-                            Costs {hint.xpPenalty} XP on completion
-                          </span>
-                        )}
-                      </div>
-                      {item ? (
-                        <p className="mt-2 text-sm text-slate-200">{item.content}</p>
-                      ) : (
-                        <button
-                          type="button"
-                          disabled={revealingHint !== null}
-                          onClick={() => void revealHint(hint.level)}
-                          className="mt-2 rounded border border-slate-700 px-3 py-1 text-xs text-brand-500 hover:bg-slate-800 disabled:opacity-50 disabled:pointer-events-none"
-                        >
-                          {revealingHint === hint.level ? 'Revealing…' : 'Reveal'}
-                        </button>
-                      )}
-                    </div>
-                  );
-                })}
-              </div>
-            </section>
-          )}
-          <section className="rounded-lg border border-cyan-400/20 bg-cyan-400/[.04] p-3">
-            <div className="flex items-center justify-between gap-3">
-              <h2 className="font-semibold">AI hint</h2>
-              <button
-                type="button"
-                disabled={loadingAiHint || !code.trim()}
-                onClick={() => {
-                  void requestAiHint();
-                }}
-                className="rounded border border-cyan-400/40 px-3 py-1 text-xs font-bold text-cyan-200 hover:bg-cyan-400/10 disabled:pointer-events-none disabled:opacity-50"
-              >
-                {loadingAiHint ? 'Thinking...' : 'Get hint'}
-              </button>
-            </div>
-            {aiHint && <p className="mt-2 text-sm text-slate-200">{aiHint}</p>}
           </section>
         </section>
         <section className="relative flex min-h-[680px] flex-col overflow-hidden rounded-xl border border-slate-800 bg-slate-900">
@@ -574,6 +610,10 @@ export function ChallengePlayerPage() {
                       <p className="mt-1 whitespace-pre-wrap">{aiErrorHint.suggestedFix}</p>
                     </>
                   )}
+                  <HintFeedback
+                    value={aiErrorVote}
+                    onVote={(helpful) => void voteAiErrorHint(helpful)}
+                  />
                 </div>
               )}
             </section>
@@ -642,6 +682,112 @@ export function ChallengePlayerPage() {
           </div>
         </section>
       </main>
+      <button
+        type="button"
+        onClick={() => {
+          setHintsOpen(true);
+        }}
+        className="fixed bottom-4 right-4 z-40 rounded-full border border-cyan-400/40 bg-slate-900 px-4 py-2 text-sm font-bold text-cyan-200 shadow-lg hover:bg-slate-800"
+      >
+        Hints
+        {challenge.hints.length > 0 && (
+          <span className="ml-2 rounded-full bg-slate-800 px-2 py-0.5 text-[11px] text-slate-300">
+            {challenge.hints.length}
+          </span>
+        )}
+      </button>
+      {hintsOpen && (
+        <div className="fixed inset-0 z-50 flex justify-end">
+          <button
+            type="button"
+            aria-label="Close hints"
+            className="absolute inset-0 bg-slate-950/70"
+            onClick={() => {
+              setHintsOpen(false);
+            }}
+          />
+          <aside className="relative flex h-full w-full max-w-md flex-col overflow-y-auto border-l border-slate-800 bg-slate-900 p-4 shadow-2xl">
+            <div className="mb-3 flex items-center justify-between">
+              <h2 className="text-lg font-bold">Hints</h2>
+              <button
+                type="button"
+                onClick={() => {
+                  setHintsOpen(false);
+                }}
+                className="rounded border border-slate-700 px-3 py-1 text-xs text-slate-300 hover:bg-slate-800"
+              >
+                Close
+              </button>
+            </div>
+            {challenge.hints.length === 0 ? (
+              <p className="text-sm text-slate-400">No static hints for this challenge.</p>
+            ) : (
+              <div className="space-y-2">
+                {challenge.hints.map((hint) => {
+                  const item = revealed[hint.level];
+                  return (
+                    <div
+                      key={hint.level}
+                      className="rounded-lg border border-slate-800 bg-slate-950 p-3"
+                    >
+                      <div className="flex items-center justify-between gap-3">
+                        <span className="text-xs font-bold text-cyan-400">Hint {hint.level}</span>
+                        {hint.xpPenalty > 0 && (
+                          <span className="text-xs text-amber-300/80">
+                            Costs {hint.xpPenalty} XP on completion
+                          </span>
+                        )}
+                      </div>
+                      {item ? (
+                        <>
+                          <p className="mt-2 text-sm text-slate-200">{item.content}</p>
+                          <HintFeedback
+                            value={item.helpful ?? null}
+                            onVote={(helpful) => void voteStaticHint(hint.level, helpful)}
+                          />
+                        </>
+                      ) : (
+                        <button
+                          type="button"
+                          disabled={revealingHint !== null}
+                          onClick={() => void revealHint(hint.level)}
+                          className="mt-2 rounded border border-slate-700 px-3 py-1 text-xs text-brand-500 hover:bg-slate-800 disabled:opacity-50 disabled:pointer-events-none"
+                        >
+                          {revealingHint === hint.level ? 'Revealing…' : 'Reveal'}
+                        </button>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+            <section className="mt-4 rounded-lg border border-cyan-400/20 bg-cyan-400/[.04] p-3">
+              <div className="flex items-center justify-between gap-3">
+                <h2 className="font-semibold">AI hint</h2>
+                <button
+                  type="button"
+                  disabled={loadingAiHint || !code.trim()}
+                  onClick={() => {
+                    void requestAiHint();
+                  }}
+                  className="rounded border border-cyan-400/40 px-3 py-1 text-xs font-bold text-cyan-200 hover:bg-cyan-400/10 disabled:pointer-events-none disabled:opacity-50"
+                >
+                  {loadingAiHint ? 'Thinking...' : 'Get hint'}
+                </button>
+              </div>
+              {aiHint && (
+                <>
+                  <p className="mt-2 whitespace-pre-wrap text-sm text-slate-200">{aiHint.hint}</p>
+                  <HintFeedback value={aiHintVote} onVote={(helpful) => void voteAiHint(helpful)} />
+                  <p className="mt-1 text-[11px] text-slate-400">
+                    {aiHint.quota.remaining} of {aiHint.quota.limit} AI hints left
+                  </p>
+                </>
+              )}
+            </section>
+          </aside>
+        </div>
+      )}
     </div>
   );
 }

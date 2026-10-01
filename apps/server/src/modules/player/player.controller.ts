@@ -7,6 +7,7 @@ import {
   LEADERBOARD_GLOBAL,
   LEADERBOARD_WEEKLY,
 } from '../../shared/lib/leaderboard.js';
+import { reachablePercent, resolveLevelAccess, type LevelState } from '../worlds/escape-room.js';
 
 function userId(req: Request, res: Response): string | undefined {
   const id = req.user?.sub;
@@ -42,8 +43,13 @@ export async function getDashboard(req: Request, res: Response): Promise<void> {
     sendError(res, 404, 'NOT_FOUND', 'Player not found');
     return;
   }
+  const safeUser = { ...user };
+  delete (safeUser as { passwordHash?: string }).passwordHash;
+  delete (safeUser as { emailVerifyToken?: string | null }).emailVerifyToken;
+  delete (safeUser as { resetPasswordToken?: string | null }).resetPasswordToken;
+  delete (safeUser as { resetPasswordExpiry?: Date | null }).resetPasswordExpiry;
   sendSuccess(res, {
-    user,
+    user: safeUser,
     summary: { achievementCount, completedLevels, unlockedWorlds },
     recentActivity,
   });
@@ -78,6 +84,19 @@ export async function listLevels(req: Request, res: Response): Promise<void> {
         include: {
           progress: { where: { userId: id } },
           challenge: { select: { slug: true, title: true } },
+          guardedByRoomLock: {
+            include: { requiresKey: { select: { slug: true, title: true } } },
+          },
+        },
+      },
+      roomKeys: {
+        where: { isPublished: true },
+        select: {
+          id: true,
+          slug: true,
+          title: true,
+          artKey: true,
+          holders: { where: { userId: id } },
         },
       },
     },
@@ -86,7 +105,63 @@ export async function listLevels(req: Request, res: Response): Promise<void> {
     sendError(res, 404, 'NOT_FOUND', 'World not found');
     return;
   }
-  sendSuccess(res, { world });
+
+  // Locks are a published presentation concern: an unpublished lock should not
+  // gate a level for players.
+  const levels = world.levels.map((level) => {
+    const lock = level.guardedByRoomLock;
+    const publishedLock = lock && lock.isPublished ? lock : null;
+    return {
+      ...level,
+      guardedByRoomLock: publishedLock,
+      progress: level.progress,
+      isCompleted: level.progress.some((entry) => entry.isCompleted),
+    };
+  });
+
+  const heldKeyIds = new Set(
+    world.roomKeys.filter((key) => key.holders.length > 0).map((key) => key.id),
+  );
+
+  const levelStates: LevelState[] = levels.map((level) => ({
+    id: level.id,
+    number: level.number,
+    isCompleted: level.isCompleted,
+    lock: level.guardedByRoomLock
+      ? {
+          title: level.guardedByRoomLock.title,
+          prompt: level.guardedByRoomLock.prompt,
+          requiresKeyId: level.guardedByRoomLock.requiresKeyId,
+          requiresKeySlug: level.guardedByRoomLock.requiresKey?.slug ?? null,
+          requiresKeyTitle: level.guardedByRoomLock.requiresKey?.title ?? null,
+        }
+      : null,
+  }));
+  const access = resolveLevelAccess(levelStates, heldKeyIds);
+
+  const payload = levels.map((level) => {
+    const resolution = access.get(level.id);
+    return {
+      ...level,
+      access: resolution?.access ?? 'OPEN',
+      missingKeySlug: resolution?.missingKeySlug ?? null,
+    };
+  });
+
+  sendSuccess(res, {
+    world: {
+      ...world,
+      levels: payload,
+      roomKeys: world.roomKeys.map((key) => ({
+        id: key.id,
+        slug: key.slug,
+        title: key.title,
+        artKey: key.artKey,
+        isHeld: key.holders.length > 0,
+      })),
+      reachablePercent: reachablePercent(access),
+    },
+  });
 }
 
 export async function listAchievements(req: Request, res: Response): Promise<void> {

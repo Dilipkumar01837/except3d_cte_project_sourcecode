@@ -21,9 +21,12 @@ export function testUsername(): string {
 }
 
 export const TEST_PASSWORD = 'E2eTest123!';
-export const GAME_CLIENT_URL = 'http://localhost:5173';
-export const ADMIN_URL = 'http://localhost:5174';
-export const API_URL = 'http://localhost:3000/api/v1';
+export const GAME_CLIENT_URL = process.env['E2E_CLIENT_URL'] ?? 'http://localhost:5173';
+export const ADMIN_URL = process.env['E2E_ADMIN_URL'] ?? 'http://localhost:5174';
+// Derived from the API port rather than hard-coded, so the suite follows the
+// server instead of silently probing a port nothing is listening on.
+const API_BASE = process.env['E2E_API_BASE_URL'] ?? 'http://localhost:3000';
+export const API_URL = `${API_BASE}/api/v1`;
 
 // ─── Game-client helpers ──────────────────────────────────────────
 

@@ -9,6 +9,7 @@
   },
   "scripts": {
     "dev": "turbo run dev",
+    "dev:worker": "pnpm --filter @code-to-escape/server worker",
     "build": "turbo run build",
     "lint": "turbo run lint",
     "typecheck": "turbo run typecheck",
@@ -18,11 +19,16 @@
     "db:migrate": "pnpm --filter @code-to-escape/database run migrate",
     "db:migrate:deploy": "pnpm --filter @code-to-escape/database run migrate:deploy",
     "db:seed:beginner": "pnpm --filter @code-to-escape/server run seed:beginner",
+    "db:seed:worlds": "pnpm --filter @code-to-escape/server run seed:worlds",
+    "db:seed:achievements": "pnpm --filter @code-to-escape/server run seed:achievements",
+    "db:seed": "pnpm run db:seed:beginner && pnpm run db:seed:worlds && pnpm run db:seed:achievements",
     "db:migrate:reset": "pnpm --filter @code-to-escape/database run migrate:reset",
     "db:studio": "pnpm --filter @code-to-escape/database run studio",
     "docker:up": "docker compose up -d",
     "docker:down": "docker compose down",
+    "test": "turbo run test --filter=!@code-to-escape/e2e",
     "test:e2e": "pnpm --filter @code-to-escape/e2e test",
+    "validate:beginner": "pnpm --filter @code-to-escape/server validate:beginner",
     "prepare": "husky"
   },
   "devDependencies": {

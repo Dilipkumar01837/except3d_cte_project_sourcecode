@@ -15,6 +15,10 @@ import {
   createWorldSchema,
   updateWorldSchema,
   createLevelSchema,
+  createRoomKeySchema,
+  updateRoomKeySchema,
+  createRoomLockSchema,
+  updateRoomLockSchema,
   updateLevelSchema,
   createAchievementSchema,
   updateAchievementSchema,
@@ -48,6 +52,14 @@ import {
   createLevelHandler,
   updateLevelHandler,
   deleteLevelHandler,
+  listRoomKeysHandler,
+  createRoomKeyHandler,
+  updateRoomKeyHandler,
+  deleteRoomKeyHandler,
+  listRoomLocksHandler,
+  createRoomLockHandler,
+  updateRoomLockHandler,
+  deleteRoomLockHandler,
   listAchievementsHandler,
   createAchievementHandler,
   updateAchievementHandler,
@@ -131,6 +143,32 @@ adminRouter.patch(
   asyncHandler(updateLevelHandler),
 );
 adminRouter.delete('/worlds/:id/levels/:levelId', asyncHandler(deleteLevelHandler));
+
+// Escape room keys and locks
+adminRouter.get('/worlds/:id/keys', asyncHandler(listRoomKeysHandler));
+adminRouter.post(
+  '/worlds/:id/keys',
+  validate(createRoomKeySchema),
+  asyncHandler(createRoomKeyHandler),
+);
+adminRouter.patch(
+  '/worlds/:id/keys/:keyId',
+  validate(updateRoomKeySchema),
+  asyncHandler(updateRoomKeyHandler),
+);
+adminRouter.delete('/worlds/:id/keys/:keyId', asyncHandler(deleteRoomKeyHandler));
+adminRouter.get('/worlds/:id/locks', asyncHandler(listRoomLocksHandler));
+adminRouter.post(
+  '/worlds/:id/locks',
+  validate(createRoomLockSchema),
+  asyncHandler(createRoomLockHandler),
+);
+adminRouter.patch(
+  '/worlds/:id/locks/:lockId',
+  validate(updateRoomLockSchema),
+  asyncHandler(updateRoomLockHandler),
+);
+adminRouter.delete('/worlds/:id/locks/:lockId', asyncHandler(deleteRoomLockHandler));
 
 // Achievements
 adminRouter.get('/achievements', asyncHandler(listAchievementsHandler));

@@ -1,7 +1,11 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import request from 'supertest';
 import { createApp } from '../app/create-app.js';
+import { env } from '../config/index.js';
 import { prisma } from '../shared/lib/prisma.js';
+import { getHintQuota } from '../modules/challenges/hint-quota.js';
+import { markHintsResolved } from '../modules/challenges/hint-outcome.js';
+import { restoreRunner, stubRunner } from './support/mock-runner.js';
 
 interface ApiBody<T = Record<string, unknown>> {
   success: boolean;
@@ -40,6 +44,7 @@ describe('Challenge system repair — admin CRUD + security + runs', () => {
   let playerToken = '';
   let playerId = '';
   let secondToken = '';
+  let secondId = '';
   let challengeId = '';
   let slug = '';
   const visibleTestIds: string[] = [];
@@ -62,9 +67,11 @@ describe('Challenge system repair — admin CRUD + security + runs', () => {
     adminToken = body<TokenUser>(relogin).data.accessToken;
     playerToken = player.accessToken;
     secondToken = second.accessToken;
+    secondId = second.user.id;
   });
 
   afterAll(async () => {
+    restoreRunner();
     if (challengeId) {
       await prisma.challenge.delete({ where: { id: challengeId } }).catch(() => undefined);
     }
@@ -74,6 +81,10 @@ describe('Challenge system repair — admin CRUD + security + runs', () => {
   });
 
   const auth = (token: string) => `Bearer ${token}`;
+  const required = (value: string | undefined): string => {
+    if (value === undefined) throw new Error('Missing test fixture');
+    return value;
+  };
 
   it('admin creates a challenge', async () => {
     const res = await request(app)
@@ -306,22 +317,172 @@ describe('Challenge system repair — admin CRUD + security + runs', () => {
     expect(count).toBe(1);
   });
 
-  it('POST /:slug/runs executes only visible cases and does not persist', async () => {
-    const before = await prisma.submission.count({ where: { userId: playerId, challengeId } });
+  it('returns resolvedAfter/helpful on a static hint reveal', async () => {
+    const res = await request(app)
+      .get(`/api/v1/challenges/${slug}/hints/3`)
+      .set('Authorization', auth(playerToken));
+    expect(res.status).toBe(200);
+    expect(
+      body<{ hint: { alreadyRevealed: boolean; resolvedAfter: boolean; helpful: boolean | null } }>(
+        res,
+      ).data.hint,
+    ).toMatchObject({ alreadyRevealed: false, resolvedAfter: false, helpful: null });
+  });
+
+  it('records self-reported feedback on a revealed static hint', async () => {
+    const unrevealed = await request(app)
+      .post(`/api/v1/challenges/${slug}/hints/2/feedback`)
+      .set('Authorization', auth(playerToken))
+      .send({ helpful: true });
+    expect(unrevealed.status).toBe(404);
+
+    const reveal = await request(app)
+      .get(`/api/v1/challenges/${slug}/hints/2`)
+      .set('Authorization', auth(playerToken));
+    expect(reveal.status).toBe(200);
+
+    const invalid = await request(app)
+      .post(`/api/v1/challenges/${slug}/hints/2/feedback`)
+      .set('Authorization', auth(playerToken))
+      .send({ helpful: 'yes' });
+    expect(invalid.status).toBe(400);
+
+    const feedback = await request(app)
+      .post(`/api/v1/challenges/${slug}/hints/2/feedback`)
+      .set('Authorization', auth(playerToken))
+      .send({ helpful: true });
+    expect(feedback.status).toBe(200);
+
+    const row = await prisma.playerHintReveal.findUniqueOrThrow({
+      where: { userId_hintId: { userId: playerId, hintId: required(hintIds[1]) } },
+    });
+    expect(row.helpful).toBe(true);
+    expect(row.resolvedAfter).toBe(false);
+  });
+
+  it('records feedback on an AI hint and enforces ownership', async () => {
+    const aiHint = await prisma.aiHintHistory.create({
+      data: { userId: playerId, challengeId, language: 'PYTHON', hint: 'AI feedback test hint' },
+    });
+
+    const foreign = await request(app)
+      .post(`/api/v1/challenges/${slug}/hints/ai/${aiHint.id}/feedback`)
+      .set('Authorization', auth(secondToken))
+      .send({ helpful: true });
+    expect(foreign.status).toBe(404);
+
+    const invalid = await request(app)
+      .post(`/api/v1/challenges/${slug}/hints/ai/${aiHint.id}/feedback`)
+      .set('Authorization', auth(playerToken))
+      .send({ helpful: 1 });
+    expect(invalid.status).toBe(400);
+
+    const feedback = await request(app)
+      .post(`/api/v1/challenges/${slug}/hints/ai/${aiHint.id}/feedback`)
+      .set('Authorization', auth(playerToken))
+      .send({ helpful: false });
+    expect(feedback.status).toBe(200);
+
+    const row = await prisma.aiHintHistory.findUniqueOrThrow({ where: { id: aiHint.id } });
+    expect(row.helpful).toBe(false);
+    expect(row.resolvedAfter).toBe(false);
+  });
+
+  it('marks every hint for a challenge resolved after an accepted solve', async () => {
+    const aiHint = await prisma.aiHintHistory.create({
+      data: { userId: playerId, challengeId, language: 'PYTHON', hint: 'AI outcome test hint' },
+    });
+    const reveal = await prisma.playerHintReveal.upsert({
+      where: { userId_hintId: { userId: playerId, hintId: required(hintIds[2]) } },
+      create: { userId: playerId, hintId: required(hintIds[2]) },
+      update: {},
+    });
+    const resolvedAt = new Date();
+    await markHintsResolved(prisma, { userId: playerId, challengeId, resolvedAt });
+
+    const resolvedAi = await prisma.aiHintHistory.findUniqueOrThrow({ where: { id: aiHint.id } });
+    expect(resolvedAi.resolvedAfter).toBe(true);
+    expect(resolvedAi.resolvedAt).not.toBeNull();
+    const resolvedReveal = await prisma.playerHintReveal.findUniqueOrThrow({
+      where: { id: reveal.id },
+    });
+    expect(resolvedReveal.resolvedAfter).toBe(true);
+    expect(resolvedReveal.resolvedAt).not.toBeNull();
+  });
+
+  it('meters AI hints per user in a rolling window', async () => {
+    const limit = 2;
+    const windowMs = 60_000;
+    const now = new Date();
+    await prisma.aiHintHistory.createMany({
+      data: [
+        {
+          userId: secondId,
+          challengeId,
+          language: 'PYTHON',
+          hint: 'quota q1',
+          createdAt: new Date(now.getTime() - 1_000),
+        },
+        {
+          userId: secondId,
+          challengeId,
+          language: 'PYTHON',
+          hint: 'quota q2',
+          createdAt: new Date(now.getTime() - 2_000),
+        },
+        {
+          userId: secondId,
+          challengeId,
+          language: 'PYTHON',
+          hint: 'quota old',
+          createdAt: new Date(now.getTime() - windowMs - 1_000),
+        },
+      ],
+    });
+    const quota = await getHintQuota(secondId, { windowMs, limit, now });
+    expect(quota).toMatchObject({ limit, used: 2, remaining: 0 });
+    // The next slot frees when the oldest in-window hint leaves the window.
+    expect(quota.resetAt.getTime()).toBe(now.getTime() - 2_000 + windowMs);
+  });
+
+  it('rejects AI hint generation once the allowance is exhausted', async () => {
+    const rows = Array.from({ length: env.aiHintDailyLimit }, (_value, index) => ({
+      userId: secondId,
+      challengeId,
+      language: 'PYTHON' as const,
+      hint: `quota fill ${String(index)}`,
+    }));
+    await prisma.aiHintHistory.createMany({ data: rows });
 
     const res = await request(app)
-      .post(`/api/v1/challenges/${slug}/runs`)
-      .set('Authorization', auth(playerToken))
-      .send({ language: 'PYTHON', sourceCode: 'a=int(input())\nb=int(input())\nprint(a+b)\n' });
-    expect(res.status).toBe(200);
-    const run = body<{
-      run: { status: string; results: Array<{ testCaseId?: string; passed: boolean }> };
-    }>(res).data.run;
-    expect(run.status).toBe('ACCEPTED');
-    expect(run.results).toHaveLength(3);
-    for (const result of run.results) {
-      expect(result.passed).toBe(true);
-      expect(visibleTestIds).toContain(result.testCaseId);
+      .post(`/api/v1/challenges/${slug}/hints/ai`)
+      .set('Authorization', auth(secondToken))
+      .send({ language: 'PYTHON', sourceCode: 'print(1)' });
+    expect(res.status).toBe(429);
+    expect(body(res).error?.code).toBe('HINT_QUOTA_EXCEEDED');
+  });
+
+  it('POST /:slug/runs executes only visible cases and does not persist', async () => {
+    const before = await prisma.submission.count({ where: { userId: playerId, challengeId } });
+    const restore = stubRunner({ status: 'ACCEPTED' });
+
+    try {
+      const res = await request(app)
+        .post(`/api/v1/challenges/${slug}/runs`)
+        .set('Authorization', auth(playerToken))
+        .send({ language: 'PYTHON', sourceCode: 'a=int(input())\nb=int(input())\nprint(a+b)\n' });
+      expect(res.status).toBe(200);
+      const run = body<{
+        run: { status: string; results: Array<{ testCaseId?: string; passed: boolean }> };
+      }>(res).data.run;
+      expect(run.status).toBe('ACCEPTED');
+      expect(run.results).toHaveLength(3);
+      for (const result of run.results) {
+        expect(result.passed).toBe(true);
+        expect(visibleTestIds).toContain(result.testCaseId);
+      }
+    } finally {
+      restore();
     }
 
     const after = await prisma.submission.count({ where: { userId: playerId, challengeId } });
@@ -329,16 +490,48 @@ describe('Challenge system repair — admin CRUD + security + runs', () => {
   });
 
   it('POST /:slug/runs reports a wrong answer per-test', async () => {
-    const res = await request(app)
-      .post(`/api/v1/challenges/${slug}/runs`)
-      .set('Authorization', auth(playerToken))
-      .send({ language: 'PYTHON', sourceCode: 'a=int(input())\nb=int(input())\nprint(a*b)\n' });
-    expect(res.status).toBe(200);
-    const run = body<{ run: { status: string; results: Array<{ passed: boolean }> } }>(res).data
-      .run;
-    expect(run.status).toBe('WRONG_ANSWER');
-    expect(run.results).toHaveLength(3);
-    expect(run.results.every((result) => !result.passed)).toBe(true);
+    const restore = stubRunner({ status: 'WRONG_ANSWER' });
+
+    try {
+      const res = await request(app)
+        .post(`/api/v1/challenges/${slug}/runs`)
+        .set('Authorization', auth(playerToken))
+        .send({ language: 'PYTHON', sourceCode: 'a=int(input())\nb=int(input())\nprint(a*b)\n' });
+      expect(res.status).toBe(200);
+      const run = body<{ run: { status: string; results: Array<{ passed: boolean }> } }>(res).data
+        .run;
+      expect(run.status).toBe('WRONG_ANSWER');
+      expect(run.results).toHaveLength(3);
+      expect(run.results.every((result) => !result.passed)).toBe(true);
+    } finally {
+      restore();
+    }
+  });
+
+  it('POST /:slug/runs surfaces a compilation error with diagnostics', async () => {
+    const restore = stubRunner({
+      status: 'COMPILATION_ERROR',
+      compilerOutput: 'main.py:2\n    return a + b\n           ^\nSyntaxError: invalid syntax',
+    });
+
+    try {
+      const res = await request(app)
+        .post(`/api/v1/challenges/${slug}/runs`)
+        .set('Authorization', auth(playerToken))
+        .send({ language: 'PYTHON', sourceCode: 'def broken(:\n' });
+      expect(res.status).toBe(200);
+      const run = body<{
+        run: {
+          status: string;
+          diagnostics: Array<{ status: string; message: string; line?: number }>;
+        };
+      }>(res).data.run;
+      expect(run.status).toBe('COMPILATION_ERROR');
+      expect(run.diagnostics.length).toBeGreaterThan(0);
+      expect(run.diagnostics[0]?.message).toContain('SyntaxError');
+    } finally {
+      restore();
+    }
   });
 
   it('POST /:slug/runs is rejected without auth', async () => {

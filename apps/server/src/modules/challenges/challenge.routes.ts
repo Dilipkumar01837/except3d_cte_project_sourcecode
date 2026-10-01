@@ -12,6 +12,8 @@ import {
   listChallenges,
   listSubmissions,
   runCode,
+  submitAiHintFeedback,
+  submitHintFeedback,
 } from './challenge.controller.js';
 import { aiHintRateLimit, submissionRateLimit } from '../../shared/middleware/rate-limit.js';
 
@@ -25,6 +27,16 @@ challengeRouter.post(
   authenticate,
   aiHintRateLimit,
   asyncHandler(getAiErrorHint),
+);
+challengeRouter.post(
+  '/:slug/hints/:level/feedback',
+  authenticate,
+  asyncHandler(submitHintFeedback),
+);
+challengeRouter.post(
+  '/:slug/hints/ai/:hintId/feedback',
+  authenticate,
+  asyncHandler(submitAiHintFeedback),
 );
 challengeRouter.get('/:slug/submissions', authenticate, asyncHandler(listSubmissions));
 challengeRouter.get(

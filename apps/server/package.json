@@ -5,10 +5,12 @@
   "type": "module",
   "scripts": {
     "dev": "tsx watch src/index.ts",
-    "build": "tsc -p tsconfig.json",
+    "build": "tsc -p tsconfig.build.json",
     "start": "node dist/index.js",
     "worker": "tsx src/worker.ts",
     "seed:beginner": "tsx scripts/seed-beginner-challenges.ts",
+    "seed:worlds": "tsx scripts/seed-worlds.ts",
+    "seed:achievements": "tsx scripts/seed-achievements.ts",
     "validate:beginner": "tsx scripts/validate-beginner-challenges.ts",
     "lint": "eslint src/",
     "typecheck": "tsc -p tsconfig.json --noEmit",

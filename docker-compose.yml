@@ -4,10 +4,10 @@ services:
     container_name: cte-postgres
     environment:
       POSTGRES_USER: cte
-      POSTGRES_PASSWORD: cte_dev_password
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-cte_dev_password}
       POSTGRES_DB: code_to_escape
     ports:
-      - '5432:5432'
+      - '127.0.0.1:5432:5432'
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
@@ -20,7 +20,7 @@ services:
     image: redis:7-alpine
     container_name: cte-redis
     ports:
-      - '6379:6379'
+      - '127.0.0.1:6379:6379'
     volumes:
       - redis_data:/data
     healthcheck:
@@ -28,6 +28,7 @@ services:
       interval: 5s
       timeout: 3s
       retries: 5
+
 
   code-runner-sandbox:
     build:
@@ -62,6 +63,91 @@ services:
       code-runner-sandbox:
         condition: service_completed_successfully
 
+  # The API process. Submissions are enqueued to Redis; the worker below drains
+  # them. Both are required for the Submit button to produce a result.
+  server:
+    build:
+      context: .
+      dockerfile: docker/server/Dockerfile
+    container_name: cte-server
+    # required: false so a fresh checkout without a .env still validates
+    # (the CI "docker compose config" job has no .env). Everything the server
+    # truly needs is also listed explicitly below.
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      NODE_ENV: ${NODE_ENV:-production}
+      PORT: 3000
+      DATABASE_URL: postgresql://cte:${POSTGRES_PASSWORD:-cte_dev_password}@postgres:5432/code_to_escape
+      REDIS_URL: redis://redis:6379
+      CODE_RUNNER_URL: http://code-runner:3002
+      APP_URL: ${APP_URL:-http://localhost:8080}
+      CORS_ORIGIN: ${CORS_ORIGIN:-http://localhost:8080}
+      # Behind the reverse proxy we must trust exactly one hop so rate limiting
+      # keys on the real client IP.
+      TRUST_PROXY_HOPS: '1'
+    ports:
+      - '127.0.0.1:3000:3000'
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      code-runner:
+        condition: service_started
+
+  # Separate process: drains the execution queue and judges submissions.
+  worker:
+    build:
+      context: .
+      dockerfile: docker/server/Dockerfile
+    container_name: cte-worker
+    command: ['node', 'dist/worker.js']
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      NODE_ENV: ${NODE_ENV:-production}
+      DATABASE_URL: postgresql://cte:${POSTGRES_PASSWORD:-cte_dev_password}@postgres:5432/code_to_escape
+      REDIS_URL: redis://redis:6379
+      CODE_RUNNER_URL: http://code-runner:3002
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      code-runner:
+        condition: service_started
+
+  # The built game client, served as static files. It calls the API at relative
+  # paths (`/api/v1`) and opens sockets same-origin, so it must share an origin
+  # with the API — which is what nginx below provides.
+  web:
+    build:
+      context: .
+      dockerfile: docker/web/Dockerfile
+    container_name: cte-web
+    restart: unless-stopped
+
+  # Single public entrypoint. Routes /api and /socket.io to the server and
+  # everything else to the SPA, so the browser sees one origin and the
+  # TRUST_PROXY_HOPS=1 setting above is truthful.
+  nginx:
+    image: nginx:1.27-alpine
+    container_name: cte-nginx
+    restart: unless-stopped
+    volumes:
+      - ./docker/nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+    ports:
+      - '8080:80'
+    depends_on:
+      server:
+        condition: service_started
+      web:
+        condition: service_started
+
 volumes:
   postgres_data:
   redis_data:
+

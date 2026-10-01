@@ -6,6 +6,8 @@ import { emitToUser } from '../../shared/lib/socket.js';
 import { updateLeaderboard } from '../../shared/lib/leaderboard.js';
 import { evaluateAchievements } from './achievement.service.js';
 import { executeWithRunner, type JudgeExecutionResult } from './judge-execution.js';
+import { markHintsResolved } from './hint-outcome.js';
+import { resolveDuel } from '../duels/duel-resolve.js';
 
 async function executeSubmission(submissionId: string): Promise<void> {
   const submission = await prisma.submission.findUnique({
@@ -14,8 +16,15 @@ async function executeSubmission(submissionId: string): Promise<void> {
     },
     where: { id: submissionId },
   });
-  if (!submission || submission.status !== 'QUEUED') return;
-  await prisma.submission.update({ where: { id: submissionId }, data: { status: 'RUNNING' } });
+  if (!submission) return;
+  // Atomic claim. A plain read-then-write let two workers (or a Redis redelivery
+  // after a crash) both observe QUEUED, both proceed, and both pay out XP and
+  // coins. updateMany with a status guard makes exactly one of them win.
+  const claim = await prisma.submission.updateMany({
+    where: { id: submissionId, status: 'QUEUED' },
+    data: { status: 'RUNNING' },
+  });
+  if (claim.count === 0) return;
   let result: JudgeExecutionResult;
   try {
     result = await executeWithRunner({
@@ -93,6 +102,14 @@ async function executeSubmission(submissionId: string): Promise<void> {
       },
     });
     if (result.status !== 'ACCEPTED') return;
+    // Engagement signal only: the player received at least one hint for this
+    // challenge and has now solved it. This does not claim the hint caused the
+    // solve; it records that a hint preceded an accepted submission.
+    await markHintsResolved(tx, {
+      userId: submission.userId,
+      challengeId: submission.challengeId,
+      resolvedAt: new Date(),
+    });
     const profile = await tx.profile.findUniqueOrThrow({ where: { userId: submission.userId } });
     newXp = profile.xp + reward.xp;
     newLevel = Math.max(1, Math.floor(Math.sqrt(newXp / 100)) + 1);
@@ -193,6 +210,31 @@ async function executeSubmission(submissionId: string): Promise<void> {
           });
         }
       }
+
+      // Award the escape-room key this level grants, if it grants one. Done
+      // inside the same transaction as the level completion so a player can never
+      // see a level marked complete without its key, or hold a key for a level
+      // they did not solve. The unique constraint on (userId, keyId) makes
+      // re-solving the level a no-op rather than a duplicate.
+      const grantedKey = await tx.roomKey.findFirst({
+        where: { grantedByLevelId: gameLevel.id, isPublished: true },
+        select: { id: true, title: true },
+      });
+      if (grantedKey) {
+        await tx.playerRoomKey.upsert({
+          where: { userId_keyId: { userId: submission.userId, keyId: grantedKey.id } },
+          create: { userId: submission.userId, keyId: grantedKey.id },
+          update: {},
+        });
+        await tx.playerNotification.create({
+          data: {
+            userId: submission.userId,
+            type: 'LEVEL_COMPLETED',
+            title: `Key found: ${grantedKey.title}`,
+            body: 'It may open a door you have not reached yet.',
+          },
+        });
+      }
     }
     await tx.playerNotification.create({
       data: {
@@ -264,20 +306,15 @@ async function executeSubmission(submissionId: string): Promise<void> {
   });
 
   if (submission.duelId && result.status === 'ACCEPTED') {
-    const duelResult = await prisma.duelMatch.updateMany({
-      where: { id: submission.duelId, status: 'ACTIVE', winnerId: null },
-      data: { status: 'COMPLETED', winnerId: submission.userId, completedAt: new Date() },
-    });
-    if (duelResult.count > 0) {
-      const duel = await prisma.duelMatch.findUnique({
-        where: { id: submission.duelId },
-        select: { creatorId: true, opponentId: true, winnerId: true },
-      });
-      if (duel?.winnerId) {
-        const event = { duelId: submission.duelId, status: 'COMPLETED', winnerId: duel.winnerId };
-        emitToUser(duel.creatorId, 'duel:completed', event);
-        if (duel.opponentId) emitToUser(duel.opponentId, 'duel:completed', event);
-      }
+    const resolution = await resolveDuel(submission.duelId);
+    if (resolution?.resolved) {
+      const event = {
+        duelId: submission.duelId,
+        status: 'COMPLETED',
+        winnerId: resolution.winnerId,
+      };
+      emitToUser(resolution.creatorId, 'duel:completed', event);
+      if (resolution.opponentId) emitToUser(resolution.opponentId, 'duel:completed', event);
     }
   }
 }

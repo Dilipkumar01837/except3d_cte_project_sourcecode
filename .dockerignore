@@ -1,0 +1,35 @@
+# Secrets must never enter an image layer. `COPY . .` in the server build stage
+# would otherwise bake the real .env into the image, where it stays recoverable
+# from the layer history even though the final image only copies dist/.
+.env
+.env.*
+!.env.example
+
+# Installed by the deps stage; copying the host tree would shadow it and breaks
+# pnpm's symlinked workspace layout.
+node_modules
+**/node_modules
+
+# Build output is regenerated inside the image.
+dist
+**/dist
+.turbo
+**/.turbo
+build
+**/build
+
+.git
+.gitignore
+.github
+**/*.tsbuildinfo
+
+# Local tooling / editor / OS noise
+.vscode
+.idea
+.DS_Store
+Thumbs.db
+coverage
+**/coverage
+*.log
+npm-debug.log*
+pnpm-debug.log*
