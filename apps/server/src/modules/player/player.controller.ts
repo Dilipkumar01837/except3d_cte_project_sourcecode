@@ -78,6 +78,7 @@ export async function listLevels(req: Request, res: Response): Promise<void> {
   const world = await prisma.gameWorld.findFirst({
     where: { id: worldId, isPublished: true },
     include: {
+      progress: { where: { userId: id } },
       levels: {
         where: { isPublished: true },
         orderBy: { number: 'asc' },
