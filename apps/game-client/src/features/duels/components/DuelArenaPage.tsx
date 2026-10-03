@@ -73,6 +73,30 @@ export function DuelArenaPage() {
     };
   }, [duelId]);
 
+  // The execution worker is a separate process, so the `duel:completed` event it
+  // emits never reaches this client: the in-memory Socket.IO server only exists
+  // in the HTTP process. Poll the persisted duel while it can still change so the
+  // winner and final results appear regardless of which process resolved it.
+  const duelStatus = duel?.status;
+  useEffect(() => {
+    if (!duelId) return;
+    if (duelStatus && duelStatus !== 'OPEN' && duelStatus !== 'ACTIVE') return;
+    const timer = window.setInterval(() => {
+      void duelApi
+        .get(duelId)
+        .then((item) => {
+          setDuel(item);
+          setWinnerId(item.winnerId ?? undefined);
+        })
+        .catch(() => {
+          // Transient read failure; the next tick retries.
+        });
+    }, 2000);
+    return () => {
+      window.clearInterval(timer);
+    };
+  }, [duelId, duelStatus]);
+
   const submit = async () => {
     if (!duelId || !code.trim() || busy || duel?.status !== 'ACTIVE') return;
     setBusy(true);

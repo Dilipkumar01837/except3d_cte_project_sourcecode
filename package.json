@@ -20,8 +20,9 @@
     "db:migrate:deploy": "pnpm --filter @code-to-escape/database run migrate:deploy",
     "db:seed:beginner": "pnpm --filter @code-to-escape/server run seed:beginner",
     "db:seed:worlds": "pnpm --filter @code-to-escape/server run seed:worlds",
+    "db:seed:variety": "pnpm --filter @code-to-escape/server run seed:variety",
     "db:seed:achievements": "pnpm --filter @code-to-escape/server run seed:achievements",
-    "db:seed": "pnpm run db:seed:beginner && pnpm run db:seed:worlds && pnpm run db:seed:achievements",
+    "db:seed": "pnpm run db:seed:beginner && pnpm run db:seed:worlds && pnpm run db:seed:variety && pnpm run db:seed:achievements",
     "db:migrate:reset": "pnpm --filter @code-to-escape/database run migrate:reset",
     "db:studio": "pnpm --filter @code-to-escape/database run studio",
     "docker:up": "docker compose up -d",
@@ -29,6 +30,8 @@
     "test": "turbo run test --filter=!@code-to-escape/e2e",
     "test:e2e": "pnpm --filter @code-to-escape/e2e test",
     "validate:beginner": "pnpm --filter @code-to-escape/server validate:beginner",
+    "validate:variety": "pnpm --filter @code-to-escape/server validate:variety",
+    "validate:variety:static": "pnpm --filter @code-to-escape/server validate:variety:static",
     "prepare": "husky"
   },
   "devDependencies": {

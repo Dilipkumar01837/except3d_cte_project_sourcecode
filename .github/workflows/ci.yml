@@ -163,9 +163,11 @@ jobs:
 
   e2e:
     # Full-stack Playwright coverage. These specs exercise the world/level map,
-    # escape-room gating, telemetry consent, and the duel lobby; none of them
-    # submit code, so the sandbox code-runner is not required here. Real judging
-    # is covered by the `sandbox` job above.
+    # escape-room gating, telemetry consent, the duel lifecycle, and — through a
+    # real submission — the full judging path. The code runner and the queue
+    # worker are therefore started below, so a browser-driven solve actually
+    # reaches ACCEPTED. Booting the runner here is what makes the "submit and get
+    # judged" journey fail loudly when judging regresses.
     name: E2E (Playwright)
     runs-on: ubuntu-latest
     needs: quality
@@ -234,12 +236,29 @@ jobs:
       - name: Install Playwright browser
         run: pnpm --filter @code-to-escape/e2e exec playwright install --with-deps chromium
 
+      - name: Build the sandbox image
+        run: docker compose build code-runner-sandbox
+
+      - name: Start the code runner
+        run: |
+          docker compose up -d code-runner
+          for i in $(seq 1 30); do
+            if curl -fsS http://localhost:3002/health; then exit 0; fi
+            sleep 2
+          done
+          echo "code-runner did not become healthy" >&2
+          docker compose logs code-runner >&2
+          exit 1
+
       - name: Run E2E tests
         # Servers are started and exercised in the same step: GitHub Actions
         # reaps orphaned background processes between steps, so a server started
-        # in an earlier step would be gone by the time Playwright runs.
+        # in an earlier step would be gone by the time Playwright runs. The
+        # worker drains the execution queue; without it, submissions stay QUEUED
+        # and the submission/world/duel specs time out.
         run: |
           pnpm --filter @code-to-escape/server dev > /tmp/server.log 2>&1 &
+          pnpm --filter @code-to-escape/server worker > /tmp/worker.log 2>&1 &
           pnpm --filter @code-to-escape/game-client dev > /tmp/client.log 2>&1 &
           for i in $(seq 1 60); do
             if curl -fsS http://localhost:3000/api/v1/health >/dev/null && curl -fsS http://localhost:5173 >/dev/null; then
@@ -250,7 +269,7 @@ jobs:
           curl -fsS http://localhost:3000/api/v1/health >/dev/null &&
             curl -fsS http://localhost:5173 >/dev/null || {
               echo "stack did not become ready" >&2
-              cat /tmp/server.log /tmp/client.log >&2
+              cat /tmp/server.log /tmp/worker.log /tmp/client.log >&2
               exit 1
             }
           pnpm test:e2e

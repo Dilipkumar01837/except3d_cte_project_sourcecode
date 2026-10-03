@@ -30,6 +30,8 @@ Thumbs.db
 
 # Testing
 coverage/
+playwright-report/
+test-results/
 
 # Prisma
 database/prisma/migrations/**/migration.sql.bak

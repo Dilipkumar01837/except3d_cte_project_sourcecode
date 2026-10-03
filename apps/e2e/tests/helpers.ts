@@ -58,6 +58,25 @@ export async function loginPlayer(
   await page.waitForURL('/dashboard', { timeout: 15_000 });
 }
 
+/**
+ * Replace the full contents of the Monaco editor with `code`.
+ *
+ * `keyboard.insertText` is used rather than `type` so the text is inserted
+ * verbatim: `type` fires keydown per character, which makes Monaco auto-close
+ * brackets and quotes and corrupts pasted code. Single-line solutions keep the
+ * suite independent of newline/auto-indent behaviour.
+ */
+export async function setEditorCode(page: Page, code: string): Promise<void> {
+  const editor = page.locator('.monaco-editor').first();
+  await editor.waitFor({ state: 'visible', timeout: 20_000 });
+  // Click the visible editor to focus Monaco's hidden input. The textarea
+  // itself is 1px/clipped and never reports as visible, so it cannot be
+  // clicked directly.
+  await editor.locator('.view-lines').click();
+  await page.keyboard.press('Control+A');
+  await page.keyboard.insertText(code);
+}
+
 /** Logout via the navigation profile dropdown. */
 export async function logout(page: Page): Promise<void> {
   // Open profile dropdown and click Log out

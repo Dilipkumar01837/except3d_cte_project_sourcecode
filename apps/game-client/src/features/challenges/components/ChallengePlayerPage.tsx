@@ -105,6 +105,31 @@ function diagnosticTone(status: string): string {
   return status === 'WRONG_ANSWER' ? 'text-amber-300' : 'text-rose-300';
 }
 
+const challengeTypeLabels: Record<string, string> = {
+  ALGORITHMS: 'Algorithms',
+  DATA_STRUCTURES: 'Data Structures',
+  DEBUGGING: 'Debugging',
+  OUTPUT_PREDICTION: 'Output Prediction',
+  FILL_IN_THE_BLANK: 'Fill in the Blank',
+  CODE_COMPLETION: 'Code Completion',
+};
+
+const challengeTypeGuidance: Record<string, string> = {
+  DEBUGGING: 'The starter code contains a bug. Find and fix it, then submit.',
+  OUTPUT_PREDICTION:
+    'Work out what the snippet in the statement prints, then write code that produces it.',
+  FILL_IN_THE_BLANK: 'Replace the gap marked with underscores so the program behaves as described.',
+  CODE_COMPLETION: 'Complete the marked TODO so the program behaves as described.',
+};
+
+function typeLabel(type: string): string {
+  return challengeTypeLabels[type] ?? type.replaceAll('_', ' ');
+}
+
+function typeGuidance(type: string): string | null {
+  return challengeTypeGuidance[type] ?? null;
+}
+
 function ResultRow({
   label,
   passed,
@@ -437,10 +462,15 @@ export function ChallengePlayerPage() {
       </header>
       <main className="mx-auto grid max-w-[1600px] gap-4 p-4 xl:grid-cols-[minmax(360px,0.8fr)_minmax(520px,1.2fr)]">
         <section className="space-y-5 overflow-auto rounded-xl border border-slate-800 bg-slate-900 p-5 xl:max-h-[calc(100vh-110px)]">
-          <div className="flex items-center justify-between">
-            <span className="rounded bg-slate-800 px-2 py-1 text-xs font-bold text-brand-500">
-              {challenge.difficulty}
-            </span>
+          <div className="flex items-center justify-between gap-2">
+            <div className="flex items-center gap-2">
+              <span className="rounded bg-slate-800 px-2 py-1 text-xs font-bold text-brand-500">
+                {challenge.difficulty}
+              </span>
+              <span className="rounded bg-cyan-400/15 px-2 py-1 text-xs font-bold text-cyan-200">
+                {typeLabel(challenge.type)}
+              </span>
+            </div>
             <span className="text-sm text-amber-300">+{challenge.xpReward} XP</span>
           </div>
           <article className="whitespace-pre-wrap text-sm leading-6 text-slate-200">
@@ -536,6 +566,14 @@ export function ChallengePlayerPage() {
             >
               {loadingAiErrorHint ? '🤖 Thinking…' : '🤖 AI Hint'}
             </button>
+          )}
+          {typeGuidance(challenge.type) && (
+            <p
+              role="note"
+              className="border-b border-slate-800 bg-slate-950 px-4 py-2 text-xs text-cyan-100/80"
+            >
+              {typeGuidance(challenge.type)}
+            </p>
           )}
           <div className="min-h-[380px] flex-1">
             <MonacoCodeEditor
