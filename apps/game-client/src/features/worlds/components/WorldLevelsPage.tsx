@@ -196,7 +196,7 @@ export function WorldLevelsPage() {
                 {canPlay ? (
                   level.challenge ? (
                     <Link
-                      to={`/challenges/${encodeURIComponent(level.challenge.slug)}`}
+                      to={`/worlds/${worldId}/rooms/${String(level.number)}`}
                       onClick={() => {
                         trackEvent('level_start', {
                           worldId,
@@ -206,7 +206,7 @@ export function WorldLevelsPage() {
                       }}
                       className="text-sm font-bold text-cyan-200 hover:text-white"
                     >
-                      Play level →
+                      Enter room →
                     </Link>
                   ) : (
                     <span className="text-sm text-slate-500">No challenge attached</span>

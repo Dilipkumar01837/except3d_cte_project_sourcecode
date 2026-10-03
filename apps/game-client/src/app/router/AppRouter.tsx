@@ -14,6 +14,7 @@ import { ChallengeListPage } from '@/features/challenges/components/ChallengeLis
 import { ChallengePlayerPage } from '@/features/challenges/components/ChallengePlayerPage';
 import { WorldsPage } from '@/features/worlds/components/WorldsPage';
 import { WorldLevelsPage } from '@/features/worlds/components/WorldLevelsPage';
+import { EscapeRoomPage } from '@/features/escape-room/pages/EscapeRoomPage';
 import { LeaderboardPage } from '@/features/leaderboard/components/LeaderboardPage';
 import { DuelLobbyPage } from '@/features/duels/components/DuelLobbyPage';
 import { DuelArenaPage } from '@/features/duels/components/DuelArenaPage';
@@ -77,6 +78,14 @@ export function AppRouter() {
           element={
             <ProtectedRoute>
               <WorldLevelsPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/worlds/:worldId/rooms/:levelNumber"
+          element={
+            <ProtectedRoute>
+              <EscapeRoomPage />
             </ProtectedRoute>
           }
         />

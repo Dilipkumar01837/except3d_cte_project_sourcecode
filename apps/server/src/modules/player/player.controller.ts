@@ -85,6 +85,7 @@ export async function listLevels(req: Request, res: Response): Promise<void> {
         include: {
           progress: { where: { userId: id } },
           challenge: { select: { slug: true, title: true } },
+          grantsRoomKey: { select: { slug: true, title: true } },
           guardedByRoomLock: {
             include: { requiresKey: { select: { slug: true, title: true } } },
           },
@@ -163,6 +164,37 @@ export async function listLevels(req: Request, res: Response): Promise<void> {
       reachablePercent: reachablePercent(access),
     },
   });
+}
+
+/**
+ * Records that the player discovered a room's clue.
+ *
+ * Discovery is monotonic (it can never be un-set) and cosmetic: it carries no XP,
+ * key, or completion, so this endpoint cannot be used to advance progression. The
+ * `upsert` also stamps `lastPlayedAt`, which the room list already tracks.
+ */
+export async function recordRoomDiscovery(req: Request, res: Response): Promise<void> {
+  const id = userId(req, res);
+  const levelId = routeParam(req, res, 'levelId');
+  if (!id || !levelId) return;
+
+  const level = await prisma.gameLevel.findFirst({
+    where: { id: levelId, isPublished: true, world: { isPublished: true } },
+    select: { id: true },
+  });
+  if (!level) {
+    sendError(res, 404, 'NOT_FOUND', 'Room not found');
+    return;
+  }
+
+  const progress = await prisma.playerLevelProgress.upsert({
+    where: { userId_levelId: { userId: id, levelId } },
+    create: { userId: id, levelId, clueRead: true, lastPlayedAt: new Date() },
+    update: { clueRead: true, lastPlayedAt: new Date() },
+    select: { levelId: true, clueRead: true, lastPlayedAt: true },
+  });
+
+  sendSuccess(res, { discovery: progress });
 }
 
 export async function listAchievements(req: Request, res: Response): Promise<void> {

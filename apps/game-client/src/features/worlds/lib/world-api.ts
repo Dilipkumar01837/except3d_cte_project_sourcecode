@@ -9,6 +9,8 @@ export interface WorldProgress {
 
 export interface LevelProgress {
   isCompleted: boolean;
+  /** Cosmetic discovery flag: the player has read this room's clue. */
+  clueRead: boolean;
   stars: number;
   attempts: number;
   bestTimeSeconds: number | null;
@@ -49,6 +51,8 @@ export interface WorldLevel {
   xpReward: number;
   previewUrl: string | null;
   challenge: { slug: string; title: string } | null;
+  /** The key this level awards when cleared, if any. */
+  grantsRoomKey: { slug: string; title: string } | null;
   progress: LevelProgress[];
   guardedByRoomLock: LevelLock | null;
   isCompleted: boolean;
@@ -84,5 +88,9 @@ export const worldApi = {
     return dataOf<{ world: WorldDetail }>(
       await apiClient.get(`/player/worlds/${encodeURIComponent(worldId)}/levels`),
     ).world;
+  },
+  /** Marks a room's clue as discovered. Cosmetic only; grants no progression. */
+  async recordDiscovery(levelId: string): Promise<void> {
+    await apiClient.post(`/player/levels/${encodeURIComponent(levelId)}/discovery`);
   },
 };

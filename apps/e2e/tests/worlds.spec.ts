@@ -36,14 +36,19 @@ test.describe('World unlock after a real solve', () => {
     // Match the exact status badge: the level description also contains
     // "padlocked", so a loose /locked/i would pass even while locked.
     await expect(lockedRidgeGate.getByText('Locked', { exact: true })).toBeVisible();
-    await expect(lockedRidgeGate.getByRole('link', { name: /play level/i })).toHaveCount(0);
+    await expect(lockedRidgeGate.getByRole('link', { name: /enter room/i })).toHaveCount(0);
 
-    // Open the first level and solve it.
+    // Enter the first room, use its terminal, then solve the challenge.
     await page
       .getByRole('article')
       .filter({ hasText: /first clearing/i })
-      .getByRole('link', { name: /play level/i })
+      .getByRole('link', { name: /enter room/i })
       .click();
+    await expect(page.getByRole('img', { name: 'Your explorer' })).toBeVisible({
+      timeout: 20_000,
+    });
+    await page.getByRole('button', { name: /puzzle terminal/i }).click();
+    await page.getByRole('button', { name: /start challenge/i }).click();
     await expect(page.getByRole('heading', { name: /sum of two numbers/i })).toBeVisible({
       timeout: 20_000,
     });
@@ -61,6 +66,6 @@ test.describe('World unlock after a real solve', () => {
     const openRidgeGate = page.getByRole('article').filter({ hasText: /ridge gate/i });
     await expect(openRidgeGate.getByText('Locked', { exact: true })).toHaveCount(0);
     await expect(openRidgeGate.getByText('Open', { exact: true })).toBeVisible();
-    await expect(openRidgeGate.getByRole('link', { name: /play level/i })).toBeVisible();
+    await expect(openRidgeGate.getByRole('link', { name: /enter room/i })).toBeVisible();
   });
 });

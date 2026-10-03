@@ -184,8 +184,8 @@ export function ChallengePlayerPage() {
   }>();
 
   const loadDetail = useCallback(
-    async (submission: Submission) => {
-      if (!slug) return;
+    async (submission: Submission | undefined) => {
+      if (!slug || !submission) return;
       if (!terminalStatuses.has(submission.status)) {
         setDetail(undefined);
         return;
@@ -208,7 +208,7 @@ export function ChallengePlayerPage() {
       setDetail(undefined);
       return;
     }
-    await loadDetail(values[0] as Submission);
+    await loadDetail(values[0]);
   }, [slug, loadDetail]);
 
   useEffect(() => {
@@ -225,7 +225,9 @@ export function ChallengePlayerPage() {
         setCode(initial);
         setSubmissions(history);
         setSelected(history[0]);
-        await loadDetail(history[0] as Submission);
+        // A first visit has no submissions yet; loadDetail treats undefined as
+        // "nothing to show" rather than dereferencing it and rejecting the load.
+        await loadDetail(history[0]);
       })
       .catch(() => {
         setError('Challenge could not be loaded.');
@@ -542,10 +544,12 @@ export function ChallengePlayerPage() {
         <div className="mx-auto flex max-w-[1600px] items-center justify-between gap-4">
           <div>
             <Link
-              to={room ? `/worlds/${room.worldId}` : '/challenges'}
+              to={
+                room ? `/worlds/${room.worldId}/rooms/${String(room.levelNumber)}` : '/challenges'
+              }
               className="text-sm text-brand-500"
             >
-              {room ? `← ${room.worldName}` : '← Challenges'}
+              {room ? `← Room ${String(room.levelNumber)}` : '← Challenges'}
             </Link>
             {room && (
               <p className="text-[11px] font-bold tracking-[.18em] text-cyan-300 uppercase">
@@ -579,6 +583,12 @@ export function ChallengePlayerPage() {
                   Next room →
                 </Link>
               )}
+              <Link
+                to={`/worlds/${room.worldId}/rooms/${String(room.levelNumber)}?cleared=1`}
+                className="text-cyan-200 hover:text-white"
+              >
+                Return to room
+              </Link>
               <Link to={`/worlds/${room.worldId}`} className="text-cyan-200 hover:text-white">
                 Return to map
               </Link>

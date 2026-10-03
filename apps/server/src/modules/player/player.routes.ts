@@ -10,6 +10,7 @@ import {
   listWorlds,
   markNotificationRead,
   getLeaderboard,
+  recordRoomDiscovery,
 } from './player.controller.js';
 
 /** Authenticated player-state API. */
@@ -19,6 +20,7 @@ playerRouter.use(authenticate);
 playerRouter.get('/dashboard', asyncHandler(getDashboard));
 playerRouter.get('/worlds', asyncHandler(listWorlds));
 playerRouter.get('/worlds/:worldId/levels', asyncHandler(listLevels));
+playerRouter.post('/levels/:levelId/discovery', asyncHandler(recordRoomDiscovery));
 playerRouter.get('/achievements', asyncHandler(listAchievements));
 playerRouter.get('/inventory', asyncHandler(listInventory));
 playerRouter.get('/notifications', asyncHandler(listNotifications));

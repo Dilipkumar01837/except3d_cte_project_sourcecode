@@ -229,4 +229,38 @@ describe('Escape-room flow — server-authoritative gating', () => {
       .send({ language: 'PYTHON', sourceCode: 'print(1)' });
     expect(res.status).toBe(202);
   });
+
+  it('records room clue discovery and surfaces it on the level list', async () => {
+    const unauthorized = await request(app).post(`/api/v1/player/levels/${level3Id}/discovery`);
+    expect(unauthorized.status).toBe(401);
+
+    const created = await request(app)
+      .post(`/api/v1/player/levels/${level3Id}/discovery`)
+      .set('Authorization', auth(playerToken));
+    expect(created.status).toBe(200);
+    expect(body<{ discovery: { clueRead: boolean } }>(created).data.discovery.clueRead).toBe(true);
+
+    // Idempotent: a second discovery updates the existing row instead of failing.
+    const again = await request(app)
+      .post(`/api/v1/player/levels/${level3Id}/discovery`)
+      .set('Authorization', auth(playerToken));
+    expect(again.status).toBe(200);
+
+    const levels = await request(app)
+      .get(`/api/v1/player/worlds/${worldId}/levels`)
+      .set('Authorization', auth(playerToken));
+    expect(levels.status).toBe(200);
+    const list = body<{ world: { levels: { id: string; progress: { clueRead: boolean }[] }[] } }>(
+      levels,
+    ).data.world.levels;
+    const level3 = list.find((entry) => entry.id === level3Id);
+    expect(level3?.progress[0]?.clueRead).toBe(true);
+  });
+
+  it('rejects discovery for an unknown room', async () => {
+    const res = await request(app)
+      .post('/api/v1/player/levels/does-not-exist/discovery')
+      .set('Authorization', auth(playerToken));
+    expect(res.status).toBe(404);
+  });
 });

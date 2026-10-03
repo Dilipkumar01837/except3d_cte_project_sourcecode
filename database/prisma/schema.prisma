@@ -389,6 +389,7 @@ model PlayerLevelProgress {
   userId      String
   levelId     String
   isCompleted Boolean  @default(false)
+  clueRead    Boolean  @default(false)
   stars       Int      @default(0)
   attempts    Int      @default(0)
   bestTimeSeconds Int?
