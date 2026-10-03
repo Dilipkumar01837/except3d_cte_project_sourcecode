@@ -92,6 +92,12 @@ jobs:
       - name: Run migrations
         run: pnpm --filter @code-to-escape/server exec npx prisma migrate deploy --schema ../../database/prisma/schema.prisma
 
+      # The server (and code-runner) resolve `@code-to-escape/shared` from its
+      # built `dist/`, which is gitignored. Build it before the unit tests so a
+      # fresh checkout does not fail with "Failed to resolve entry for package".
+      - name: Build shared package
+        run: pnpm --filter @code-to-escape/shared build
+
       - name: Run server unit tests
         env:
           NODE_ENV: test

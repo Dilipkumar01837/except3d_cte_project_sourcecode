@@ -17,7 +17,10 @@ export function ProtectedRoute({ children }: ProtectedRouteProps) {
     }
   }, [accessToken, isAuthenticated, loadUser]);
 
-  if (isLoading) {
+  // Only block on the initial session hydrate. Background actions (e.g.
+  // updating the profile) also toggle `isLoading`; unmounting children for
+  // those would discard in-flight component state such as a success message.
+  if (isLoading && !isAuthenticated) {
     return (
       <div className="flex min-h-[calc(100vh-4.5rem)] items-center justify-center bg-[#050816]">
         <div className="h-9 w-9 animate-spin rounded-full border-4 border-cyan-300/30 border-t-cyan-300" />

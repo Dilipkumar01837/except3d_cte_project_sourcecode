@@ -90,6 +90,7 @@ export function AppLayout() {
               <div className="relative">
                 <button
                   type="button"
+                  aria-label="Account menu"
                   aria-expanded={profileOpen}
                   onClick={() => {
                     setProfileOpen((open) => !open);

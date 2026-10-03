@@ -59,7 +59,7 @@ test.describe('Registration', () => {
     await page.getByLabel('Password').fill(TEST_PASSWORD);
     await page.getByRole('button', { name: /create account/i }).click();
     await page.waitForURL('/dashboard', { timeout: 20_000 });
-    await expect(page.getByRole('heading', { name: /hey,/i })).toBeVisible();
+    await expect(page.getByRole('heading', { name: /welcome back/i })).toBeVisible();
   });
 
   test('shows validation errors for empty fields', async ({ page }) => {
@@ -88,7 +88,9 @@ test.describe('Registration', () => {
     await page.getByLabel('Email').fill(email);
     await page.getByLabel('Password').fill(TEST_PASSWORD);
     await page.getByRole('button', { name: /create account/i }).click();
-    await expect(page.getByText(/email already in use|already/i)).toBeVisible({ timeout: 10_000 });
+    await expect(page.getByRole('alert')).toContainText(/email already in use/i, {
+      timeout: 10_000,
+    });
   });
 });
 
@@ -112,7 +114,7 @@ test.describe('Login', () => {
     await page.getByLabel('Password').fill(TEST_PASSWORD);
     await page.getByRole('button', { name: /sign in/i }).click();
     await page.waitForURL('/dashboard', { timeout: 20_000 });
-    await expect(page.getByRole('heading', { name: /hey,/i })).toBeVisible();
+    await expect(page.getByRole('heading', { name: /welcome back/i })).toBeVisible();
   });
 
   test('shows error for wrong password', async ({ page }) => {
@@ -120,7 +122,9 @@ test.describe('Login', () => {
     await page.getByLabel('Email').fill(email);
     await page.getByLabel('Password').fill('WrongPassword999!');
     await page.getByRole('button', { name: /sign in/i }).click();
-    await expect(page.getByText(/invalid|incorrect|password/i)).toBeVisible({ timeout: 10_000 });
+    await expect(page.getByRole('alert')).toContainText(/invalid email or password/i, {
+      timeout: 10_000,
+    });
     await expect(page).toHaveURL('/login');
   });
 
@@ -129,7 +133,9 @@ test.describe('Login', () => {
     await page.getByLabel('Email').fill('nobody@test.invalid');
     await page.getByLabel('Password').fill(TEST_PASSWORD);
     await page.getByRole('button', { name: /sign in/i }).click();
-    await expect(page.getByText(/invalid|not found|incorrect/i)).toBeVisible({ timeout: 10_000 });
+    await expect(page.getByRole('alert')).toContainText(/invalid email or password/i, {
+      timeout: 10_000,
+    });
   });
 });
 
@@ -154,10 +160,10 @@ test.describe('Dashboard', () => {
     await page.getByRole('button', { name: /sign in/i }).click();
     await page.waitForURL('/dashboard');
 
-    await expect(page.getByRole('heading', { name: /hey,/i })).toBeVisible();
-    await expect(page.getByText(/level/i)).toBeVisible();
-    await expect(page.getByText(/xp/i)).toBeVisible();
-    await expect(page.getByRole('link', { name: /play challenges/i })).toBeVisible();
+    await expect(page.getByRole('heading', { name: /welcome back/i })).toBeVisible();
+    await expect(page.getByText('Level', { exact: true })).toBeVisible();
+    await expect(page.getByText('Total XP', { exact: true })).toBeVisible();
+    await expect(page.getByRole('link', { name: /play missions/i })).toBeVisible();
   });
 });
 
@@ -275,6 +281,8 @@ test.describe('Logout', () => {
 test.describe('404 page', () => {
   test('shows not found page for unknown routes', async ({ page }) => {
     await page.goto('/this-page-does-not-exist-at-all');
-    await expect(page.getByText(/not found|404|page.*not/i)).toBeVisible({ timeout: 10_000 });
+    await expect(page.getByRole('heading', { name: /page not found/i })).toBeVisible({
+      timeout: 10_000,
+    });
   });
 });

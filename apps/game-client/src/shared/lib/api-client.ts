@@ -29,6 +29,12 @@ function processQueue(error: Error | null, token: string | null) {
 
 type RetryConfig = InternalAxiosRequestConfig & { _retry?: boolean };
 
+// Auth endpoints own their own error handling. Refreshing on a 401 from login
+// or register would replace the actionable error ("Invalid email or password")
+// with a redirect, and refreshing the refresh endpoint itself would loop.
+const isAuthEndpoint = (url?: string): boolean =>
+  ['/auth/login', '/auth/register', '/auth/refresh'].some((path) => url?.includes(path) ?? false);
+
 apiClient.interceptors.response.use(
   (response) => response,
   async (error: unknown) => {
@@ -36,7 +42,12 @@ apiClient.interceptors.response.use(
 
     const originalRequest = error.config as RetryConfig | undefined;
 
-    if (error.response?.status === 401 && originalRequest && !originalRequest._retry) {
+    if (
+      error.response?.status === 401 &&
+      originalRequest &&
+      !originalRequest._retry &&
+      !isAuthEndpoint(originalRequest.url)
+    ) {
       if (isRefreshing) {
         return new Promise((resolve, reject) => {
           failedQueue.push({

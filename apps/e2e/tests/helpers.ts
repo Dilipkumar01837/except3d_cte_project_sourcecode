@@ -61,8 +61,7 @@ export async function loginPlayer(
 /** Logout via the navigation profile dropdown. */
 export async function logout(page: Page): Promise<void> {
   // Open profile dropdown and click Log out
-  const profileButton = page.locator('header button').filter({ hasText: /[A-Z]/ }).first();
-  await profileButton.click();
+  await page.getByRole('button', { name: /account menu/i }).click();
   await page.getByRole('button', { name: 'Log out' }).click();
   // Confirm the logout dialog
   await page.getByRole('button', { name: 'Log out' }).last().click();

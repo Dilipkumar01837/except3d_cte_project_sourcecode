@@ -2,11 +2,15 @@ import { motion } from 'framer-motion';
 import { Link } from 'react-router-dom';
 import { useEffect, useState } from 'react';
 import { PlayerPageShell } from '@/shared/components/layout/PlayerPageShell';
+import { useAuthStore } from '@/features/auth/store/auth.store';
 import { worldApi, type WorldSummary } from '../lib/world-api';
 
 export function WorldsPage() {
+  const { user } = useAuthStore();
   const [worlds, setWorlds] = useState<WorldSummary[]>([]);
   const [error, setError] = useState('');
+
+  const playerXp = user?.profile?.xp ?? 0;
 
   useEffect(() => {
     void worldApi
@@ -35,7 +39,10 @@ export function WorldsPage() {
       <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-3">
         {worlds.map((world, index) => {
           const progress = world.progress[0]?.completionPercent ?? 0;
-          const unlocked = world.progress[0]?.isUnlocked ?? false;
+          // A world is reachable once the player has earned its XP requirement.
+          // Relying only on the stored progress row hid the first world
+          // (requiredXp 0) from every brand-new player, who has no row yet.
+          const unlocked = (world.progress[0]?.isUnlocked ?? false) || playerXp >= world.requiredXp;
           return (
             <motion.article
               key={world.id}
