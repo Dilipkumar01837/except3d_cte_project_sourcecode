@@ -186,17 +186,12 @@ jobs:
           --health-timeout 3s
           --health-retries 10
 
-      redis:
-        image: redis:7-alpine
-        ports: ["6379:6379"]
-        options: >-
-          --health-cmd "redis-cli ping"
-          --health-interval 5s
-          --health-timeout 3s
-          --health-retries 10
-
     env:
       DATABASE_URL: postgresql://ci:ci@localhost:5432/cte_ci
+      # Redis comes from docker compose (started with the code runner below),
+      # not a GitHub service: the runner container reaches compose's redis by
+      # service name, and a service on 6379 would collide with it. Compose binds
+      # redis to 127.0.0.1:6379, which the host-started server/worker also use.
       REDIS_URL: redis://localhost:6379
       JWT_SECRET: ci-jwt-secret-not-for-prod-0123456789abcdef
       REFRESH_TOKEN_SECRET: ci-refresh-secret-not-for-prod-0123456789abcdef
