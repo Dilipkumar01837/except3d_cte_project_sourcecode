@@ -178,7 +178,9 @@ Full API reference: [`docs/API.md`](docs/API.md)
 - **Daily rewards** — 7-day rotating streak rewards (XP + coins)
 - **Notifications** — in-app real-time notifications via Socket.IO
 - **Worlds and levels** — published world map, level progress, challenge assignment, and next-world unlocking
-- **Duel lobby and arena** — create/join active matches, submit duel solutions, and record the first accepted winner
+- **Escape-room gating** — worlds can hold room keys and key-locked levels; a player's reachable progress is computed from keys held (`resolveLevelAccess` / `reachablePercent`)
+- **Duel lobby and arena** — create/join active matches, submit duel solutions; a duel completes once both players have an accepted submission, and the winner is decided by score then earliest finish
+- **Consent-gated telemetry** — optional engagement events (off by default), aggregate-only admin summary, retention sweep
 
 ### Challenges & Execution
 
@@ -187,6 +189,8 @@ Full API reference: [`docs/API.md`](docs/API.md)
 - **Execution pipeline** — HTTP API enqueues to Redis; worker dequeues, runs, saves results atomically
 - **Scoring** — accuracy × speed bonus × retry penalty; hidden test cases never sent to client
 - **AI hints** — optional Groq-powered hints based on the challenge, language, and current student code; authored hints remain available without Groq
+- **Hint metering & feedback** — per-user daily AI-hint quota, and helpful/not-helpful voting on authored and AI hints; hints are marked resolved when the challenge is accepted
+- **Beginner content** — 6 problems seeded across all 7 languages (42 challenges) in the starter world
 
 ### Progression
 
@@ -205,6 +209,9 @@ Full API reference: [`docs/API.md`](docs/API.md)
 ### Infrastructure & Quality
 
 - **Security** — Helmet CSP, explicit CORS, rate limiting (200/15 min general, 20/15 min auth, 10/1 min submissions), bcrypt passwords, hashed reset tokens
+- **Session safety** — suspended accounts have live sockets disconnected and their access is revalidated on socket auth
+- **Runner concurrency** — the code runner bounds in-flight executions; excess requests get `503` + `Retry-After`, and `/health` reports in-flight/queued counts
+- **Background sweepers** — the worker expires stale duels and prunes telemetry past the retention window
 - **Observability** — structured JSON request logger with `X-Request-ID`
 - **Email** — SMTP provider (no SDK) + dev stdout preview; welcome + password reset templates
 - **CI** — GitHub Actions: lint + typecheck + build + unit tests (with PostgreSQL + Redis services)
@@ -249,11 +256,11 @@ Private — graduation project.
 
 ## Current Scope
 
-The current implementation is a browser-based gamified learning prototype. It does not
-include a native React Native application, 3D escape-room scenes, friends or matchmaking,
-or research measurements proving learning-outcome improvements. Duel mode currently records
-the first accepted solution as the winner; detailed timed score comparison is not part of the
-current API.
+The current implementation is a browser-based gamified learning prototype. Escape rooms are
+2D themed scenes, not 3D. It does not include a native React Native application, friends or
+matchmaking, or research measurements proving learning-outcome improvements. Duel matches
+resolve once both players submit an accepted solution, ranked by score then earliest finish;
+telemetry is opt-in and aggregate-only, and is not used as a learning-outcome measure.
 
 ### Running a submission
 

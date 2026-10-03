@@ -99,17 +99,32 @@ Supported languages: `JAVA`, `PYTHON`, `JAVASCRIPT`, `TYPESCRIPT`, `CPP`, `GO`, 
 
 ---
 
+## Telemetry
+
+> Consent-gated and **off by default**. Events are only stored once the player opts in. The event vocabulary is a fixed allow-list shared by the client and server; no IP address or user agent is stored, and the signals are engagement-only (never presented as evidence of learning).
+
+| Method | Endpoint             | Purpose                                                                    |
+| ------ | -------------------- | -------------------------------------------------------------------------- |
+| GET    | `/telemetry/consent` | Current opt-in state with consent timestamp and policy version             |
+| PATCH  | `/telemetry/consent` | Set opt-in (`{ "optIn": true }`) with an audit timestamp                   |
+| POST   | `/telemetry/events`  | Submit a batch (`{ sessionId, events: [{ name, payload? }] }`); always 202 |
+
+Allowed event names: `session_start`, `world_enter`, `level_start`, `level_complete`, `challenge_open`, `hint_reveal`, `duel_join`, `daily_reward_claim`.
+
+---
+
 ## Admin
 
 > Requires `ADMIN` or `SUPER_ADMIN` role.
 
 ### Overview & System
 
-| Method | Endpoint          | Purpose                                    |
-| ------ | ----------------- | ------------------------------------------ |
-| GET    | `/admin/overview` | Aggregate platform stats                   |
-| GET    | `/admin/system`   | Live service health + queue depth + uptime |
-| GET    | `/admin/audit`    | Paginated admin action audit log           |
+| Method | Endpoint                   | Purpose                                              |
+| ------ | -------------------------- | ---------------------------------------------------- |
+| GET    | `/admin/overview`          | Aggregate platform stats                             |
+| GET    | `/admin/system`            | Live service health + queue depth + uptime           |
+| GET    | `/admin/audit`             | Paginated admin action audit log                     |
+| GET    | `/admin/telemetry/summary` | Aggregate engagement counts (no per-user drill-down) |
 
 ### User Management
 

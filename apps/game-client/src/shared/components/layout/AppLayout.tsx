@@ -1,8 +1,9 @@
 import { AnimatePresence, motion } from 'framer-motion';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Link, NavLink, Outlet, useNavigate } from 'react-router-dom';
 import { APP_NAME } from '@code-to-escape/shared';
 import { useAuthStore } from '@/features/auth/store/auth.store';
+import { initTelemetry, resetTelemetry } from '@/shared/lib/telemetry';
 
 const publicLinks = [
   { to: '/', label: 'Home' },
@@ -47,6 +48,15 @@ export function AppLayout() {
   const navigate = useNavigate();
   const links = isAuthenticated ? privateLinks : publicLinks;
   const initials = (user?.profile?.displayName ?? user?.username ?? 'P').slice(0, 1).toUpperCase();
+  const userId = user?.id;
+
+  useEffect(() => {
+    if (isAuthenticated && userId) {
+      void initTelemetry(userId);
+    } else {
+      resetTelemetry();
+    }
+  }, [isAuthenticated, userId]);
 
   const finishLogout = async (): Promise<void> => {
     await logout();

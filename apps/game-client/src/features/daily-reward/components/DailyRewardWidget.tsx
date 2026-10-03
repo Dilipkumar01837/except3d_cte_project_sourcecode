@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { dailyRewardApi } from '../lib/daily-reward-api';
 import { GlassPanel } from '@/shared/components/ui/player-ui';
+import { trackEvent } from '@/shared/lib/telemetry';
 
 interface DailyRewardStatus {
   canClaim: boolean;
@@ -35,6 +36,7 @@ export function DailyRewardWidget() {
       setStatus((prev) =>
         prev ? { ...prev, canClaim: false, claimedToday: true, streak: result.streak } : prev,
       );
+      trackEvent('daily_reward_claim', { streak: result.streak });
     } catch {
       // ignore — user may have already claimed
     } finally {

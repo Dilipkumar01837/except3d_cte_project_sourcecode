@@ -1,7 +1,9 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuthStore } from '@/features/auth/store/auth.store';
 import { authApi } from '@/shared/lib/auth-api';
+import { getTelemetryConsent, setTelemetryConsent } from '@/shared/lib/telemetry-api';
+import { applyTelemetryConsent } from '@/shared/lib/telemetry';
 import { PlayerPageShell } from '@/shared/components/layout/PlayerPageShell';
 import { GlassPanel, MetaRow, PanelHeading } from '@/shared/components/ui/player-ui';
 import { FormButton } from '@/shared/components/ui/FormButton';
@@ -12,6 +14,33 @@ export function SettingsPage() {
   const [deleting, setDeleting] = useState(false);
   const [showConfirm, setShowConfirm] = useState(false);
   const [loggingOut, setLoggingOut] = useState(false);
+  const [telemetryOn, setTelemetryOn] = useState(false);
+  const [savingTelemetry, setSavingTelemetry] = useState(false);
+  const [telemetryLoaded, setTelemetryLoaded] = useState(false);
+
+  useEffect(() => {
+    void getTelemetryConsent()
+      .then((consent) => {
+        setTelemetryOn(consent.optIn);
+      })
+      .catch(() => undefined)
+      .finally(() => {
+        setTelemetryLoaded(true);
+      });
+  }, []);
+
+  const handleTelemetryToggle = () => {
+    const next = !telemetryOn;
+    setSavingTelemetry(true);
+    void setTelemetryConsent(next)
+      .then((consent) => {
+        setTelemetryOn(consent.optIn);
+        applyTelemetryConsent(consent);
+      })
+      .finally(() => {
+        setSavingTelemetry(false);
+      });
+  };
 
   const handleLogout = () => {
     setLoggingOut(true);
@@ -59,6 +88,31 @@ export function SettingsPage() {
         <FormButton variant="ghost" onClick={handleLogout} loading={loggingOut} fullWidth={false}>
           Sign out
         </FormButton>
+      </GlassPanel>
+
+      <GlassPanel className="p-6">
+        <PanelHeading
+          title="Privacy"
+          description="Optional, anonymous engagement telemetry. Off by default."
+        />
+        <p className="mb-4 text-sm leading-6 text-slate-400">
+          When enabled, we record broad engagement events (for example, a challenge was opened or a
+          hint was revealed) to understand how the game is used. We never store IP addresses or user
+          agents, and these signals are never used to make claims about learning.
+        </p>
+        <div className="flex flex-wrap items-center gap-3">
+          <FormButton
+            variant="ghost"
+            fullWidth={false}
+            disabled={!telemetryLoaded || savingTelemetry}
+            onClick={handleTelemetryToggle}
+          >
+            {telemetryOn ? 'Turn off telemetry' : 'Turn on telemetry'}
+          </FormButton>
+          <span className="text-sm text-slate-400">
+            {telemetryOn ? 'Currently on' : 'Currently off'}
+          </span>
+        </div>
       </GlassPanel>
 
       <GlassPanel className="border-rose-400/20 bg-rose-950/20 p-6">

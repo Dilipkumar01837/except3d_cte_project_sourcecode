@@ -63,3 +63,15 @@ export const aiHintRateLimit = limiter({
   // `authenticate` first, so req.user is always present here.
   keyGenerator: (req) => req.user?.sub ?? req.ip ?? 'unknown',
 });
+
+/**
+ * Telemetry is batched client-side, so the limit is per account and generous
+ * enough for normal flushing. Keyed by account for the same reason as AI hints.
+ */
+export const telemetryRateLimit = limiter({
+  name: 'telemetry',
+  windowMs: 60 * 1000,
+  max: RELAXED ? 10_000 : 120,
+  message: 'Too many telemetry batches. Please wait a moment.',
+  keyGenerator: (req) => req.user?.sub ?? req.ip ?? 'unknown',
+});

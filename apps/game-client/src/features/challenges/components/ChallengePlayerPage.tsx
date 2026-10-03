@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { io } from 'socket.io-client';
 import { MonacoCodeEditor } from './MonacoCodeEditor';
@@ -13,6 +13,7 @@ import {
   type Submission,
   type SubmissionDetail,
 } from '../lib/challenge-api';
+import { trackEvent } from '@/shared/lib/telemetry';
 
 function HintFeedback({
   value,
@@ -128,6 +129,7 @@ export function ChallengePlayerPage() {
   const [challenge, setChallenge] = useState<Challenge>();
   const [language, setLanguage] = useState<Language>('PYTHON');
   const [code, setCode] = useState(defaultCode.PYTHON);
+  const completedSubmissionsRef = useRef<Set<string>>(new Set());
   const [submissions, setSubmissions] = useState<Submission[]>([]);
   const [selected, setSelected] = useState<Submission>();
   const [detail, setDetail] = useState<SubmissionDetail>();
@@ -187,6 +189,7 @@ export function ChallengePlayerPage() {
     void Promise.all([challengeApi.get(slug), challengeApi.submissions(slug)])
       .then(async ([item, history]) => {
         setChallenge(item);
+        trackEvent('challenge_open', { slug });
         const initial = item.starterCode['PYTHON'] ?? defaultCode['PYTHON'];
         setCode(initial);
         setSubmissions(history);
@@ -234,6 +237,13 @@ export function ChallengePlayerPage() {
             });
           return completed;
         });
+        if (
+          event.status === 'ACCEPTED' &&
+          !completedSubmissionsRef.current.has(event.submissionId)
+        ) {
+          completedSubmissionsRef.current.add(event.submissionId);
+          trackEvent('level_complete', { slug });
+        }
       },
     );
 
@@ -254,6 +264,7 @@ export function ChallengePlayerPage() {
         ...current,
         [level]: { content: item.content, penalty: item.xpPenalty, helpful: item.helpful },
       }));
+      trackEvent('hint_reveal', { level });
     } catch {
       setError('Unable to reveal this hint.');
     } finally {

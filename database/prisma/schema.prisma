@@ -85,6 +85,7 @@ model User {
   wonDuels       DuelMatch[] @relation("DuelWinner")
   aiHintHistory  AiHintHistory[]
   roomKeys       PlayerRoomKey[]
+  telemetryEvents TelemetryEvent[]
 
   @@index([email])
   @@index([username])
@@ -119,6 +120,12 @@ model Profile {
   accuracy      Float      @default(0)
   gamesPlayed   Int        @default(0)
   longestStreak Int        @default(0)
+  // Consent-gated engagement telemetry. Off by default; nothing is recorded
+  // until the player explicitly opts in. The timestamp and policy version make
+  // consent auditable.
+  telemetryOptIn        Boolean   @default(false)
+  telemetryConsentAt    DateTime?
+  telemetryConsentVersion String?
   createdAt     DateTime   @default(now())
   updatedAt     DateTime   @updatedAt
 
@@ -665,4 +672,22 @@ model AdminAuditLog {
   @@index([adminId, createdAt])
   @@index([action, createdAt])
   @@index([targetType, targetId])
+}
+
+// ─────────────────────────────────────────
+// Consent-gated engagement telemetry
+// ─────────────────────────────────────────
+
+model TelemetryEvent {
+  id        String   @id @default(uuid())
+  userId    String
+  name      String
+  payload   Json?
+  sessionId String?
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
+  @@index([name, createdAt])
 }

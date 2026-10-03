@@ -2,6 +2,7 @@ import { motion } from 'framer-motion';
 import { Link, useParams } from 'react-router-dom';
 import { useEffect, useState } from 'react';
 import { PlayerPageShell } from '@/shared/components/layout/PlayerPageShell';
+import { trackEvent } from '@/shared/lib/telemetry';
 import { worldApi, type WorldDetail, type WorldLevel } from '../lib/world-api';
 
 function accessLabel(level: WorldLevel): { text: string; className: string } {
@@ -29,6 +30,7 @@ export function WorldLevelsPage() {
       .getLevels(worldId)
       .then((item) => {
         setWorld(item);
+        trackEvent('world_enter', { worldId });
       })
       .catch(() => {
         setError('This world could not be loaded.');
@@ -160,6 +162,13 @@ export function WorldLevelsPage() {
                   level.challenge ? (
                     <Link
                       to={`/challenges/${encodeURIComponent(level.challenge.slug)}`}
+                      onClick={() => {
+                        trackEvent('level_start', {
+                          worldId,
+                          levelId: level.id,
+                          slug: level.challenge?.slug,
+                        });
+                      }}
                       className="text-sm font-bold text-cyan-200 hover:text-white"
                     >
                       Play level →

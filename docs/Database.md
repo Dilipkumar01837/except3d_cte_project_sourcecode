@@ -39,10 +39,16 @@ These are the models that exist in the schema today:
 | Social         | `DuelMatch`, `PlayerNotification`                                                                |
 | AI             | `AiHintHistory`                                                                                  |
 | Admin          | `AdminAuditLog`                                                                                  |
+| Telemetry      | `TelemetryEvent` (consent-gated; cascades on user delete)                                        |
 
 There is no `Room`, `Friend`, `Boss`, `Quest`, `Leaderboard`, `AdminUser`, or
 `GameSettings` model. Leaderboards are Redis sorted sets, not a table; administration uses
 the `User.role` enum plus `AdminAuditLog`.
+
+`Profile` carries the telemetry consent state (`telemetryOptIn`, off by default, plus
+`telemetryConsentAt` and `telemetryConsentVersion`). `TelemetryEvent` rows are only written
+for opted-in accounts and are pruned by the worker's retention sweep
+(`TELEMETRY_RETENTION_DAYS`).
 
 ### Concurrency-sensitive constraints
 

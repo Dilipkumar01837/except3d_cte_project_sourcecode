@@ -101,6 +101,11 @@ flowchart TB
 | `challenges`   | `/api/v1/challenges`          | Browse + submit + poll execution               |
 | `daily-reward` | `/api/v1/player/daily-reward` | Streak-based daily rewards                     |
 | `admin`        | `/api/v1/admin`               | Full CRUD + audit log (ADMIN/SUPER_ADMIN only) |
+| `telemetry`    | `/api/v1/telemetry`           | Consent-gated engagement events (opt-in)       |
+
+Telemetry is opt-in and off by default. The `telemetry` module stores only a fixed allow-list
+of engagement events (never IP addresses or user agents) for opted-in accounts; the execution
+worker prunes rows past the retention window.
 
 ## Execution Pipeline
 

@@ -72,6 +72,14 @@ export const env = {
   // coarse HTTP limiter in rate-limit.ts only guards bursts.
   aiHintDailyLimit: Number.parseInt(getEnv('AI_HINT_DAILY_LIMIT', '20'), 10),
   aiHintWindowMs: Number.parseInt(getEnv('AI_HINT_WINDOW_MS', '86400000'), 10),
+  // Consent-gated engagement telemetry. Raw events are pruned after this many
+  // days; a single client batch is capped so one request cannot flood the table.
+  telemetryRetentionDays: Number.parseInt(getEnv('TELEMETRY_RETENTION_DAYS', '90'), 10),
+  telemetryMaxBatch: Number.parseInt(getEnv('TELEMETRY_MAX_BATCH', '50'), 10),
+  telemetrySweepIntervalMs: Number.parseInt(
+    getEnv('TELEMETRY_SWEEP_INTERVAL_MS', String(6 * 60 * 60 * 1000)),
+    10,
+  ),
   // OAuth — optional, disabled when empty
   googleClientId: getEnv('GOOGLE_CLIENT_ID', ''),
   googleClientSecret: getEnv('GOOGLE_CLIENT_SECRET', ''),

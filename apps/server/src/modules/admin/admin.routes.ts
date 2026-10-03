@@ -66,6 +66,7 @@ import {
   publishAchievementHandler,
   unpublishAchievementHandler,
 } from './admin.controller.js';
+import { getTelemetrySummaryHandler } from '../telemetry/telemetry.controller.js';
 
 export const adminRouter: IRouter = Router();
 
@@ -184,3 +185,6 @@ adminRouter.patch(
 );
 adminRouter.post('/achievements/:id/publish', asyncHandler(publishAchievementHandler));
 adminRouter.post('/achievements/:id/unpublish', asyncHandler(unpublishAchievementHandler));
+
+// Telemetry (aggregate, engagement-only; no per-user drill-down)
+adminRouter.get('/telemetry/summary', asyncHandler(getTelemetrySummaryHandler));

@@ -3,6 +3,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { challengeApi, type ChallengeSummary } from '@/features/challenges/lib/challenge-api';
 import { PlayerPageShell } from '@/shared/components/layout/PlayerPageShell';
 import { duelApi, type Duel } from '../lib/duel-api';
+import { trackEvent } from '@/shared/lib/telemetry';
 
 export function DuelLobbyPage() {
   const [challenges, setChallenges] = useState<ChallengeSummary[]>([]);
@@ -50,6 +51,7 @@ export function DuelLobbyPage() {
     try {
       const duel = await duelApi.join(duelId);
       setDuels((current) => current.filter((item) => item.id !== duel.id));
+      trackEvent('duel_join');
       void navigate(`/duels/${duel.id}`);
     } catch {
       setError('That duel is no longer available.');
