@@ -160,3 +160,108 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - run: docker compose config
+
+  e2e:
+    # Full-stack Playwright coverage. These specs exercise the world/level map,
+    # escape-room gating, telemetry consent, and the duel lobby; none of them
+    # submit code, so the sandbox code-runner is not required here. Real judging
+    # is covered by the `sandbox` job above.
+    name: E2E (Playwright)
+    runs-on: ubuntu-latest
+    needs: quality
+
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: ci
+          POSTGRES_PASSWORD: ci
+          POSTGRES_DB: cte_ci
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
+
+      redis:
+        image: redis:7-alpine
+        ports: ["6379:6379"]
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
+
+    env:
+      DATABASE_URL: postgresql://ci:ci@localhost:5432/cte_ci
+      REDIS_URL: redis://localhost:6379
+      JWT_SECRET: ci-jwt-secret-not-for-prod-0123456789abcdef
+      REFRESH_TOKEN_SECRET: ci-refresh-secret-not-for-prod-0123456789abcdef
+      CODE_RUNNER_TOKEN: ci-runner-token
+      CODE_RUNNER_URL: http://localhost:3002
+      CORS_ORIGIN: http://localhost:5173,http://localhost:5174
+      TRUST_PROXY_HOPS: '0'
+      # Relaxed rate limits: the suite makes many auth/API calls from one IP.
+      # rate-limit.ts reads NODE_ENV directly; unset means production limits.
+      NODE_ENV: development
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Generate Prisma client
+        run: pnpm db:generate
+
+      - name: Run migrations
+        run: pnpm --filter @code-to-escape/server exec npx prisma migrate deploy --schema ../../database/prisma/schema.prisma
+
+      - name: Seed content
+        run: pnpm db:seed
+
+      - name: Build
+        run: pnpm build
+
+      - name: Install Playwright browser
+        run: pnpm --filter @code-to-escape/e2e exec playwright install --with-deps chromium
+
+      - name: Run E2E tests
+        # Servers are started and exercised in the same step: GitHub Actions
+        # reaps orphaned background processes between steps, so a server started
+        # in an earlier step would be gone by the time Playwright runs.
+        run: |
+          pnpm --filter @code-to-escape/server dev > /tmp/server.log 2>&1 &
+          pnpm --filter @code-to-escape/game-client dev > /tmp/client.log 2>&1 &
+          for i in $(seq 1 60); do
+            if curl -fsS http://localhost:3000/api/v1/health >/dev/null && curl -fsS http://localhost:5173 >/dev/null; then
+              break
+            fi
+            sleep 2
+          done
+          curl -fsS http://localhost:3000/api/v1/health >/dev/null &&
+            curl -fsS http://localhost:5173 >/dev/null || {
+              echo "stack did not become ready" >&2
+              cat /tmp/server.log /tmp/client.log >&2
+              exit 1
+            }
+          pnpm test:e2e
+
+      - name: Upload Playwright report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: apps/e2e/playwright-report
+          retention-days: 7
+
