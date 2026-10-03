@@ -14,6 +14,7 @@ import {
   type SubmissionDetail,
 } from '../lib/challenge-api';
 import { trackEvent } from '@/shared/lib/telemetry';
+import { worldApi, type WorldSummary } from '@/features/worlds/lib/world-api';
 
 function HintFeedback({
   value,
@@ -176,6 +177,11 @@ export function ChallengePlayerPage() {
   const [fontSize, setFontSize] = useState(14);
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
+  const [roomProgress, setRoomProgress] = useState<{
+    nextRoomSlug: string | null;
+    worldComplete: boolean;
+    nextWorld: WorldSummary | null;
+  }>();
 
   const loadDetail = useCallback(
     async (submission: Submission) => {
@@ -276,6 +282,42 @@ export function ChallengePlayerPage() {
       socket.disconnect();
     };
   }, [slug]);
+
+  const isAccepted = useMemo(
+    () => submissions.some((item) => item.status === 'ACCEPTED'),
+    [submissions],
+  );
+
+  // Once the room is cleared, pull the updated world map to offer the next room
+  // (or the world-complete celebration). This is optional enrichment: if the
+  // fetch fails the completion banner still renders, just without the links.
+  useEffect(() => {
+    const room = challenge?.gameLevelContext;
+    if (!room || !isAccepted) return;
+    let cancelled = false;
+    void Promise.all([worldApi.getLevels(room.worldId), worldApi.list()])
+      .then(([world, worlds]) => {
+        if (cancelled) return;
+        const nextRoom = world.levels
+          .filter(
+            (level) =>
+              level.number > room.levelNumber && level.access === 'OPEN' && level.challenge,
+          )
+          .sort((a, b) => a.number - b.number)[0];
+        const index = worlds.findIndex((item) => item.id === world.id);
+        setRoomProgress({
+          nextRoomSlug: nextRoom?.challenge?.slug ?? null,
+          worldComplete: (world.progress[0]?.completionPercent ?? 0) >= 100,
+          nextWorld: index >= 0 ? (worlds[index + 1] ?? null) : null,
+        });
+      })
+      .catch(() => {
+        // Non-fatal: the banner renders without next-room links.
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [challenge, isAccepted]);
 
   const visibleTests = useMemo(() => challenge?.testCases ?? [], [challenge]);
 
@@ -445,14 +487,71 @@ export function ChallengePlayerPage() {
 
   if (error && !challenge) return <div className="p-8 text-rose-200">{error}</div>;
   if (!challenge) return <div className="p-8 text-slate-300">Loading challenge…</div>;
+
+  const room = challenge.gameLevelContext;
+  const latest = submissions[0];
+  const missionFailed = Boolean(
+    latest &&
+    terminalStatuses.has(latest.status) &&
+    latest.status !== 'ACCEPTED' &&
+    latest.status !== 'INTERNAL_ERROR',
+  );
+
+  // A locked room is a real wall, not a hidden button: if the player reached the
+  // URL directly, show the door rather than the editor.
+  if (room && !room.isCompleted && room.access !== 'OPEN') {
+    return (
+      <div className="min-h-screen bg-slate-950 text-slate-100">
+        <header className="border-b border-slate-800 px-4 py-3">
+          <div className="mx-auto flex max-w-[1600px] items-center justify-between gap-4">
+            <Link to={`/worlds/${room.worldId}`} className="text-sm text-brand-500">
+              ← {room.worldName}
+            </Link>
+          </div>
+        </header>
+        <main className="mx-auto max-w-2xl p-8">
+          <div className="rounded-2xl border border-amber-300/30 bg-amber-300/[.06] p-8 text-center">
+            <p className="text-4xl" aria-hidden="true">
+              🔒
+            </p>
+            <h1 className="mt-4 text-2xl font-black">Room sealed</h1>
+            <p className="mt-3 text-sm text-slate-300">{room.levelDescription}</p>
+            {room.lock && <p className="mt-4 text-sm text-amber-200/90">{room.lock.prompt}</p>}
+            <p className="mt-4 text-sm font-bold text-amber-200">
+              {room.access === 'LOCKED'
+                ? room.lock?.requiresKeyTitle
+                  ? `You need the ${room.lock.requiresKeyTitle}.`
+                  : 'This door needs a key you have not found yet.'
+                : 'Clear the previous room to open this one.'}
+            </p>
+            <Link
+              to={`/worlds/${room.worldId}`}
+              className="mt-6 inline-block font-bold text-cyan-200 hover:text-white"
+            >
+              Return to the map →
+            </Link>
+          </div>
+        </main>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100">
       <header className="border-b border-slate-800 px-4 py-3">
         <div className="mx-auto flex max-w-[1600px] items-center justify-between gap-4">
           <div>
-            <Link to="/challenges" className="text-sm text-brand-500">
-              ← Challenges
+            <Link
+              to={room ? `/worlds/${room.worldId}` : '/challenges'}
+              className="text-sm text-brand-500"
+            >
+              {room ? `← ${room.worldName}` : '← Challenges'}
             </Link>
+            {room && (
+              <p className="text-[11px] font-bold tracking-[.18em] text-cyan-300 uppercase">
+                Room {room.levelNumber} · {room.levelTitle}
+              </p>
+            )}
             <h1 className="text-lg font-bold">{challenge.title}</h1>
           </div>
           <div className="text-right text-xs text-slate-400">
@@ -460,8 +559,69 @@ export function ChallengePlayerPage() {
           </div>
         </div>
       </header>
+
+      {room && isAccepted && (
+        <div className="border-b border-emerald-300/30 bg-emerald-300/[.08] px-4 py-3">
+          <div className="mx-auto flex max-w-[1600px] flex-wrap items-center justify-between gap-3">
+            <div>
+              <p className="font-black text-emerald-200">MISSION COMPLETE</p>
+              <p className="text-sm text-emerald-100/90">
+                Room {room.levelNumber} cleared.
+                {room.grantsKeyTitle ? ` Key found: ${room.grantsKeyTitle}.` : ''}
+              </p>
+            </div>
+            <div className="flex flex-wrap items-center gap-3 text-sm font-bold">
+              {roomProgress?.nextRoomSlug && (
+                <Link
+                  to={`/challenges/${encodeURIComponent(roomProgress.nextRoomSlug)}`}
+                  className="text-cyan-200 hover:text-white"
+                >
+                  Next room →
+                </Link>
+              )}
+              <Link to={`/worlds/${room.worldId}`} className="text-cyan-200 hover:text-white">
+                Return to map
+              </Link>
+            </div>
+          </div>
+          {roomProgress?.worldComplete && (
+            <p className="mx-auto mt-2 max-w-[1600px] text-sm font-black text-amber-200">
+              ESCAPE COMPLETE — you cleared {room.worldName}.
+              {roomProgress.nextWorld && (
+                <>
+                  {' '}
+                  <Link
+                    to={`/worlds/${roomProgress.nextWorld.id}`}
+                    className="text-cyan-200 hover:text-white"
+                  >
+                    Enter {roomProgress.nextWorld.name} →
+                  </Link>
+                </>
+              )}
+            </p>
+          )}
+        </div>
+      )}
+
+      {!isAccepted && missionFailed && (
+        <div className="border-b border-rose-400/30 bg-rose-500/[.08] px-4 py-2">
+          <div className="mx-auto max-w-[1600px] text-sm font-black text-rose-200">
+            ACCESS DENIED — your run did not pass. Fix the failing cases and try again.
+          </div>
+        </div>
+      )}
+
       <main className="mx-auto grid max-w-[1600px] gap-4 p-4 xl:grid-cols-[minmax(360px,0.8fr)_minmax(520px,1.2fr)]">
         <section className="space-y-5 overflow-auto rounded-xl border border-slate-800 bg-slate-900 p-5 xl:max-h-[calc(100vh-110px)]">
+          {room && (
+            <div className="rounded-lg border border-cyan-300/20 bg-cyan-300/[.05] p-3">
+              <p className="text-[11px] font-bold tracking-[.18em] text-cyan-200 uppercase">
+                Mission · {room.worldName}
+              </p>
+              <p className="mt-1 text-sm text-slate-200">{room.levelDescription}</p>
+              {room.lock && <p className="mt-1 text-xs text-amber-200/90">{room.lock.prompt}</p>}
+            </div>
+          )}
           <div className="flex items-center justify-between gap-2">
             <div className="flex items-center gap-2">
               <span className="rounded bg-slate-800 px-2 py-1 text-xs font-bold text-brand-500">

@@ -8,8 +8,9 @@ import { evaluateAchievements } from './achievement.service.js';
 import { executeWithRunner, type JudgeExecutionResult } from './judge-execution.js';
 import { markHintsResolved } from './hint-outcome.js';
 import { resolveDuel } from '../duels/duel-resolve.js';
+import { resolveChallengeRoom } from '../worlds/challenge-room.service.js';
 
-async function executeSubmission(submissionId: string): Promise<void> {
+export async function executeSubmission(submissionId: string): Promise<void> {
   const submission = await prisma.submission.findUnique({
     include: {
       challenge: { include: { testCases: true, gameLevel: { include: { world: true } } } },
@@ -79,6 +80,15 @@ async function executeSubmission(submissionId: string): Promise<void> {
   let newLevel = 1;
   let completedTotal = 0;
 
+  // Escape-room progression is only advanced by a normal (non-duel) submission
+  // whose room is genuinely reachable. The HTTP gate already rejects locked
+  // submissions, but re-checking here means no other enqueue path can slip past
+  // a door, and a duel win cannot silently clear a level on the world map.
+  const room =
+    result.status === 'ACCEPTED' && !submission.duelId
+      ? await resolveChallengeRoom(submission.userId, submission.challengeId)
+      : null;
+
   await prisma.$transaction(async (tx) => {
     await tx.submission.update({
       where: { id: submission.id },
@@ -127,7 +137,7 @@ async function executeSubmission(submissionId: string): Promise<void> {
       },
     });
     const gameLevel = submission.challenge.gameLevel;
-    if (gameLevel) {
+    if (gameLevel && room?.access === 'OPEN') {
       const previousProgress = await tx.playerLevelProgress.findUnique({
         where: { userId_levelId: { userId: submission.userId, levelId: gameLevel.id } },
         select: { bestTimeSeconds: true },

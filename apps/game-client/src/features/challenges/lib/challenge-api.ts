@@ -13,6 +13,27 @@ export interface ChallengeSummary {
   timeLimitMs: number;
   memoryLimitMb: number;
 }
+/** The room a challenge belongs to, present only when it is bound to a level. */
+export interface ChallengeRoomLock {
+  title: string;
+  prompt: string;
+  requiresKeySlug: string | null;
+  requiresKeyTitle: string | null;
+}
+export interface ChallengeRoom {
+  worldId: string;
+  worldSlug: string;
+  worldName: string;
+  levelId: string;
+  levelNumber: number;
+  levelTitle: string;
+  levelDescription: string;
+  isCompleted: boolean;
+  access: 'OPEN' | 'LOCKED' | 'SEQUENTIAL';
+  missingKeySlug: string | null;
+  lock: ChallengeRoomLock | null;
+  grantsKeyTitle: string | null;
+}
 export interface Challenge extends ChallengeSummary {
   statement: string;
   constraints: string | null;
@@ -24,6 +45,8 @@ export interface Challenge extends ChallengeSummary {
     explanation: string | null;
   }>;
   hints: Array<{ level: number; xpPenalty: number }>;
+  /** Null for standalone challenges (Explore list, duels). */
+  gameLevelContext: ChallengeRoom | null;
 }
 export interface Submission {
   id: string;

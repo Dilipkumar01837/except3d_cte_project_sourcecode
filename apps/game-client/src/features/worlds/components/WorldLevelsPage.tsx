@@ -3,7 +3,7 @@ import { Link, useParams } from 'react-router-dom';
 import { useEffect, useState } from 'react';
 import { PlayerPageShell } from '@/shared/components/layout/PlayerPageShell';
 import { trackEvent } from '@/shared/lib/telemetry';
-import { worldApi, type WorldDetail, type WorldLevel } from '../lib/world-api';
+import { worldApi, type WorldDetail, type WorldLevel, type WorldSummary } from '../lib/world-api';
 
 function accessLabel(level: WorldLevel): { text: string; className: string } {
   if (level.isCompleted) {
@@ -22,6 +22,7 @@ function accessLabel(level: WorldLevel): { text: string; className: string } {
 export function WorldLevelsPage() {
   const { worldId = '' } = useParams();
   const [world, setWorld] = useState<WorldDetail>();
+  const [nextWorld, setNextWorld] = useState<WorldSummary | null>(null);
   const [error, setError] = useState('');
 
   useEffect(() => {
@@ -36,6 +37,27 @@ export function WorldLevelsPage() {
         setError('This world could not be loaded.');
       });
   }, [worldId]);
+
+  const completionPercent = world?.progress[0]?.completionPercent ?? 0;
+
+  // When every room is cleared, find the next world so the escape can continue.
+  useEffect(() => {
+    if (!world || completionPercent < 100) return;
+    let cancelled = false;
+    void worldApi
+      .list()
+      .then((worlds) => {
+        if (cancelled) return;
+        const index = worlds.findIndex((item) => item.id === world.id);
+        setNextWorld(index >= 0 ? (worlds[index + 1] ?? null) : null);
+      })
+      .catch(() => {
+        // Optional: the completion banner renders without a next-world link.
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [world, completionPercent]);
 
   if (error) {
     return (
@@ -76,15 +98,28 @@ export function WorldLevelsPage() {
       <div className="mb-6 grid gap-3 sm:grid-cols-2">
         <div className="flex items-center justify-between rounded-2xl border border-white/10 bg-white/[.035] p-5 text-sm">
           <span className="text-slate-400">World progress</span>
-          <span className="font-bold text-cyan-200">
-            {world.progress[0]?.completionPercent ?? 0}%
-          </span>
+          <span className="font-bold text-cyan-200">{completionPercent}%</span>
         </div>
         <div className="flex items-center justify-between rounded-2xl border border-white/10 bg-white/[.035] p-5 text-sm">
           <span className="text-slate-400">Reachable now</span>
           <span className="font-bold text-cyan-200">{world.reachablePercent}%</span>
         </div>
       </div>
+
+      {completionPercent === 100 && (
+        <div className="mb-6 rounded-2xl border border-amber-300/40 bg-amber-300/[.08] p-6 text-center">
+          <p className="text-2xl font-black text-amber-200">ESCAPE COMPLETE</p>
+          <p className="mt-2 text-sm text-slate-200">You cleared every room in {world.name}.</p>
+          {nextWorld && (
+            <Link
+              to={`/worlds/${nextWorld.id}`}
+              className="mt-4 inline-block font-bold text-cyan-200 hover:text-white"
+            >
+              Enter {nextWorld.name} →
+            </Link>
+          )}
+        </div>
+      )}
 
       {(heldKeys.length > 0 || missingKeys.length > 0) && (
         <section aria-label="Keys" className="mb-6">

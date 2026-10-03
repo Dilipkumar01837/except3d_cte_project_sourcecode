@@ -7,6 +7,7 @@ import { enqueueSubmission } from './execution.queue.js';
 import { executeWithRunner, JudgeServiceError } from './judge-execution.js';
 import { getHintQuota } from './hint-quota.js';
 import { AiHintUnavailableError, generateAiErrorHint, generateAiHint } from './ai-hint.service.js';
+import { resolveChallengeRoom } from '../worlds/challenge-room.service.js';
 
 function playerId(req: Request, res: Response): string | undefined {
   const id = req.user?.sub;
@@ -82,7 +83,12 @@ export async function getChallenge(req: Request, res: Response): Promise<void> {
     sendError(res, 404, 'NOT_FOUND', 'Challenge not found');
     return;
   }
-  sendSuccess(res, { challenge });
+  // Signed-in players also receive the escape-room context so the challenge
+  // screen can frame the room and route back to the map. Anonymous callers get
+  // the plain challenge, keeping the endpoint public.
+  const userId = req.user?.sub;
+  const gameLevelContext = userId ? await resolveChallengeRoom(userId, challenge.id) : null;
+  sendSuccess(res, { challenge: { ...challenge, gameLevelContext } });
 }
 
 export async function getHint(req: Request, res: Response): Promise<void> {
@@ -345,6 +351,24 @@ export async function createSubmission(req: Request, res: Response): Promise<voi
   const challenge = await prisma.challenge.findFirst({ where: { slug, isPublished: true } });
   if (!challenge || !challenge.supportedLanguages.includes(body.language)) {
     sendError(res, 404, 'NOT_FOUND', 'Challenge or language not available');
+    return;
+  }
+  // Escape-room gate. A challenge bound to a published level is behind a door;
+  // enforcing it here means a direct API call cannot skip the room map. Unbound
+  // challenges (Explore, duels) resolve to null and stay freely playable.
+  const room = await resolveChallengeRoom(userId, challenge.id);
+  if (room && room.access !== 'OPEN') {
+    const key = room.lock?.requiresKeyTitle;
+    sendError(
+      res,
+      403,
+      'ROOM_LOCKED',
+      room.access === 'LOCKED'
+        ? key
+          ? `This room is locked. You need the ${key}.`
+          : 'This room is locked.'
+        : 'Clear the previous room before entering this one.',
+    );
     return;
   }
   const submission = await prisma.submission.create({

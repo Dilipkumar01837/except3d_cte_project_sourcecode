@@ -1,5 +1,5 @@
 import { Router, type IRouter } from 'express';
-import { authenticate } from '../../shared/middleware/authenticate.js';
+import { authenticate, optionalAuthenticate } from '../../shared/middleware/authenticate.js';
 import { asyncHandler } from '../../shared/middleware/error-handler.js';
 import {
   createSubmission,
@@ -19,7 +19,7 @@ import { aiHintRateLimit, submissionRateLimit } from '../../shared/middleware/ra
 
 export const challengeRouter: IRouter = Router();
 challengeRouter.get('/', asyncHandler(listChallenges));
-challengeRouter.get('/:slug', asyncHandler(getChallenge));
+challengeRouter.get('/:slug', optionalAuthenticate, asyncHandler(getChallenge));
 challengeRouter.get('/:slug/hints/:level', authenticate, asyncHandler(getHint));
 challengeRouter.post('/:slug/hints/ai', authenticate, aiHintRateLimit, asyncHandler(getAiHint));
 challengeRouter.post(
