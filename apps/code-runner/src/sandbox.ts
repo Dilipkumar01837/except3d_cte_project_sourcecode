@@ -7,6 +7,22 @@ import type { ExecutionRequest, ExecutionStatus } from './contracts.js';
 const MAX_OUTPUT_BYTES = 64_000;
 const SANDBOX_IMAGE = process.env['CODE_RUNNER_IMAGE'] ?? 'code-to-escape/sandbox:latest';
 
+// The outer container watchdog is a pure safety net against a hung `docker`
+// process. The authoritative programming limits live inside the container
+// (`execute.py`): a 20s compile budget and a `timeLimitMs` run timeout. This
+// outer timer only exists to reclaim a container that never exits, so it must
+// be generous enough to cover cold container startup (Windows Docker Desktop
+// cold starts take ~5-10s) plus a full compile plus the program's own limit.
+const MIN_CONTAINER_WATCHDOG_MS = 30_000;
+const CONTAINER_STARTUP_ALLOWANCE_MS = 10_000;
+const CONTAINER_COMPILE_ALLOWANCE_MS = 20_000;
+const MAX_CONTAINER_WATCHDOG_MS = 120_000;
+
+export function containerWatchdogMs(timeLimitMs: number): number {
+  const budget = timeLimitMs + CONTAINER_STARTUP_ALLOWANCE_MS + CONTAINER_COMPILE_ALLOWANCE_MS;
+  return Math.min(MAX_CONTAINER_WATCHDOG_MS, Math.max(MIN_CONTAINER_WATCHDOG_MS, budget));
+}
+
 export interface SandboxResponse {
   status: Exclude<ExecutionStatus, 'ACCEPTED' | 'WRONG_ANSWER'> | 'EXECUTED';
   executionTimeMs?: number;
@@ -71,7 +87,7 @@ export async function executeInSandbox(
       const timer = setTimeout(() => {
         timedOut = true;
         child.kill();
-      }, request.timeLimitMs + 2_000);
+      }, containerWatchdogMs(request.timeLimitMs));
       child.on('close', () => {
         void (async () => {
           clearTimeout(timer);

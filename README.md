@@ -2,7 +2,7 @@
 
 > **Gamified programming learning platform** — a browser-based application where learners solve coding challenges, earn XP, progress through worlds, compare rankings, and compete in duel lobbies.
 
-[![CI](https://github.com/dilipkumardilip/code-to-escape/actions/workflows/ci.yml/badge.svg)](https://github.com/dilipkumardilip/code-to-escape/actions)
+[![CI](https://github.com/Dilipkumar01837/except3d_cte_project_sourcecode/actions/workflows/ci.yml/badge.svg)](https://github.com/Dilipkumar01837/except3d_cte_project_sourcecode/actions)
 
 ---
 
