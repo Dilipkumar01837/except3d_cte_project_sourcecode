@@ -26,7 +26,7 @@ export function LoginPage() {
   };
 
   return (
-    <AuthCard title="Welcome Back" subtitle="Sign in to continue your coding adventure">
+    <AuthCard title="Sign in" subtitle="Resume your next coding mission.">
       <form
         onSubmit={(e) => {
           e.preventDefault();
@@ -64,7 +64,7 @@ export function LoginPage() {
         />
 
         <div className="flex justify-end">
-          <Link to="/forgot-password" className="text-xs text-cyan-300 hover:text-cyan-200">
+          <Link to="/forgot-password" className="text-xs text-amber-300 hover:text-amber-200">
             Forgot password?
           </Link>
         </div>
@@ -75,7 +75,7 @@ export function LoginPage() {
 
         <p className="text-center text-sm text-slate-400">
           Don&apos;t have an account?{' '}
-          <Link to="/register" className="text-cyan-300 hover:text-cyan-200">
+          <Link to="/register" className="text-amber-300 hover:text-amber-200">
             Sign up
           </Link>
         </p>

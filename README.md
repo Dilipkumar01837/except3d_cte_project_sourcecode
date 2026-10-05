@@ -407,6 +407,15 @@ Groq/Firebase variables in `.env`. The worker must run for submitted code to be 
 - Groq API for optional adaptive hints and Firebase Cloud Messaging for web notifications
 - Vitest, Supertest, and Playwright for testing
 
+## Frontend Design
+
+The web client uses a dense developer-tool visual language: near-black charcoal surfaces,
+one amber action accent, mono typography for code and metrics, 6-8px radii, thin borders,
+and short transitions. Shared shell navigation includes a responsive sidebar and `Cmd/Ctrl+K`
+command palette. Review the component showcase at `/design-system` while running the game
+client. The redesign intentionally avoids purple branding, decorative blobs, heavy shadows,
+and large marketing-card treatments.
+
 ## Contributors
 
 - Dilip Kumar C — project engineering, platform implementation, infrastructure, and documentation

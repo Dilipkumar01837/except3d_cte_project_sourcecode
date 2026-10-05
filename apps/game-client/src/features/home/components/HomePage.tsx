@@ -31,7 +31,7 @@ const languages = ['Python', 'JavaScript', 'TypeScript', 'Rust', 'Go'];
 /** Premium public landing page for the Code to Escape game. */
 export function HomePage() {
   return (
-    <div className="overflow-hidden bg-[#050816] text-slate-100">
+    <div className="overflow-hidden bg-ink-base text-slate-100">
       <section className="relative isolate border-b border-white/10">
         <div aria-hidden="true" className="landing-grid absolute inset-0 -z-10 opacity-50" />
         <div
@@ -40,7 +40,7 @@ export function HomePage() {
         />
         <div
           aria-hidden="true"
-          className="absolute right-0 top-32 -z-10 h-96 w-96 rounded-full bg-violet-600/20 blur-3xl"
+          className="absolute right-0 top-32 -z-10 h-96 w-96 rounded-full bg-amber-400/10 blur-3xl"
         />
         <div className="mx-auto grid min-h-[calc(100vh-4.5rem)] max-w-7xl items-center gap-14 px-6 py-20 lg:grid-cols-[1.05fr_.95fr] lg:px-8">
           <motion.div
@@ -48,13 +48,13 @@ export function HomePage() {
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.55 }}
           >
-            <p className="mb-5 inline-flex rounded-full border border-cyan-300/20 bg-cyan-300/10 px-4 py-2 text-xs font-semibold uppercase tracking-[0.2em] text-cyan-200">
+            <p className="mb-5 inline-flex rounded-md border border-amber-400/30 bg-amber-400/10 px-3 py-2 font-mono text-xs font-semibold uppercase tracking-[0.14em] text-amber-300">
               The coding adventure awaits
             </p>
             <h1 className="max-w-3xl text-5xl font-black leading-[.95] tracking-tight sm:text-6xl lg:text-7xl">
               Learn code.
               <br />
-              <span className="text-cyan-300">Escape worlds.</span>
+              <span className="text-amber-300">Escape worlds.</span>
             </h1>
             <p className="mt-7 max-w-xl text-lg leading-8 text-slate-300">
               {APP_NAME} turns programming practice into an adventure. Write logic, outsmart
@@ -63,7 +63,7 @@ export function HomePage() {
             <div className="mt-9 flex flex-wrap gap-4">
               <Link
                 to="/register"
-                className="rounded-xl bg-cyan-400 px-6 py-3.5 font-bold text-slate-950 shadow-lg shadow-cyan-500/20 transition hover:bg-cyan-300 focus:outline-none focus:ring-2 focus:ring-cyan-200 focus:ring-offset-2 focus:ring-offset-[#050816]"
+                className="rounded-md bg-amber-400 px-6 py-3.5 font-bold text-black transition hover:bg-amber-300 focus:outline-none focus:ring-2 focus:ring-amber-200"
               >
                 Start your escape
               </Link>
@@ -96,10 +96,10 @@ export function HomePage() {
             transition={{ delay: 0.15, duration: 0.65 }}
           >
             <div
-              className="absolute -inset-5 rounded-[2rem] bg-gradient-to-r from-cyan-500/30 to-violet-500/30 blur-2xl"
+              className="absolute -inset-3 rounded-lg bg-amber-400/10 blur-xl"
               aria-hidden="true"
             />
-            <div className="relative rounded-[1.7rem] border border-white/15 bg-slate-950/80 p-4 shadow-2xl backdrop-blur-xl sm:p-6">
+            <div className="relative rounded-lg border border-ink-strong bg-ink-surface p-4 sm:p-6">
               <div className="mb-5 flex items-center justify-between">
                 <span className="font-mono text-xs text-slate-400">mission_01.py</span>
                 <span className="rounded-full bg-emerald-400/15 px-3 py-1 text-xs font-semibold text-emerald-300">
@@ -108,7 +108,7 @@ export function HomePage() {
               </div>
               <pre className="overflow-x-auto rounded-xl bg-[#0b1022] p-5 font-mono text-sm leading-7 text-slate-300">
                 <code>
-                  <span className="text-violet-300">def</span>{' '}
+                  <span className="text-amber-300">def</span>{' '}
                   <span className="text-cyan-300">open_gate</span>(key):{`\n`} {`if`} key =={' '}
                   <span className="text-emerald-300">"logic"</span>:{`\n`} gate.unlock(){`\n`}{' '}
                   player.escape(){`\n`}{' '}
@@ -117,7 +117,7 @@ export function HomePage() {
               </pre>
               <div className="mt-5 grid grid-cols-3 gap-3 text-center text-xs">
                 <div className="rounded-lg bg-white/5 p-3 text-cyan-200">+250 XP</div>
-                <div className="rounded-lg bg-white/5 p-3 text-violet-200">Level 04</div>
+                <div className="rounded-lg bg-ink-elevated p-3 text-amber-200">Level 04</div>
                 <div className="rounded-lg bg-white/5 p-3 text-amber-200">3 day streak</div>
               </div>
             </div>
@@ -170,7 +170,7 @@ export function HomePage() {
       </section>
 
       <section className="mx-auto max-w-7xl px-6 py-24 lg:px-8">
-        <div className="rounded-3xl border border-cyan-300/20 bg-gradient-to-br from-cyan-400/15 via-slate-900 to-violet-500/20 px-7 py-14 text-center sm:px-14">
+        <div className="rounded-lg border border-amber-400/30 bg-ink-surface px-7 py-14 text-center sm:px-14">
           <p className="text-sm font-bold uppercase tracking-[.2em] text-cyan-200">
             Your first world is ready
           </p>

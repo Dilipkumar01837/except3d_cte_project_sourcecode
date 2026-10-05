@@ -9,9 +9,7 @@ export function GlassPanel({
   children: ReactNode;
 }) {
   return (
-    <div
-      className={`rounded-2xl border border-white/10 bg-white/[0.04] p-5 shadow-xl shadow-black/25 backdrop-blur-sm ${className}`}
-    >
+    <div className={`rounded-lg border border-ink-border bg-ink-surface p-5 ${className}`}>
       {children}
     </div>
   );
@@ -29,14 +27,14 @@ export function StatTile({
   accent?: 'cyan' | 'amber' | 'violet' | 'emerald';
 }) {
   const valueClass = {
-    cyan: 'text-cyan-200',
+    cyan: 'text-amber-200',
     amber: 'text-amber-200',
-    violet: 'text-violet-200',
+    violet: 'text-amber-200',
     emerald: 'text-emerald-200',
   }[accent];
 
   return (
-    <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4 transition hover:border-white/20 hover:bg-white/[0.05]">
+    <div className="rounded-lg border border-ink-border bg-ink-surface p-4 transition hover:border-amber-400/50 hover:bg-ink-elevated">
       <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-slate-500">{label}</p>
       <p className={`mt-2 text-3xl font-black ${valueClass}`}>{value}</p>
       {hint && <p className="mt-1 text-xs text-slate-500">{hint}</p>}
@@ -64,13 +62,13 @@ export function ActionLink({
 }) {
   const styles =
     variant === 'primary'
-      ? 'bg-cyan-300 text-slate-950 hover:bg-cyan-200'
-      : 'border border-white/15 bg-white/5 text-slate-200 hover:bg-white/10';
+      ? 'bg-amber-400 text-black hover:bg-amber-300'
+      : 'border border-ink-border bg-ink-elevated text-slate-200 hover:border-amber-400/50';
 
   return (
     <Link
       to={to}
-      className={`inline-flex items-center justify-center rounded-xl px-4 py-2.5 text-sm font-bold transition ${styles}`}
+      className={`inline-flex items-center justify-center rounded-md px-4 py-2.5 text-sm font-bold transition ${styles}`}
     >
       {children}
     </Link>

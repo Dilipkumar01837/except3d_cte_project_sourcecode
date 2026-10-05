@@ -20,6 +20,7 @@ import { DuelLobbyPage } from '@/features/duels/components/DuelLobbyPage';
 import { DuelArenaPage } from '@/features/duels/components/DuelArenaPage';
 import { AssessmentPage } from '@/features/assessments/components/AssessmentPage';
 import { FriendsPage } from '@/features/social/components/FriendsPage';
+import { DesignSystemPage } from '@/features/design-system/components/DesignSystemPage';
 
 export function AppRouter() {
   return (
@@ -35,6 +36,7 @@ export function AppRouter() {
       <Route element={<AppLayout />}>
         <Route index element={<HomePage />} />
         <Route path="/explore" element={<ChallengeListPage />} />
+        <Route path="/design-system" element={<DesignSystemPage />} />
         <Route
           path="/dashboard"
           element={

@@ -9,18 +9,18 @@ const RANK_STYLES: Record<string, string> = {
   BEGINNER: 'border-slate-500/30 bg-slate-500/10 text-slate-300',
   NOVICE: 'border-emerald-400/30 bg-emerald-400/10 text-emerald-200',
   APPRENTICE: 'border-cyan-400/30 bg-cyan-400/10 text-cyan-200',
-  JOURNEYMAN: 'border-violet-400/30 bg-violet-400/10 text-violet-200',
+  JOURNEYMAN: 'border-amber-400/30 bg-amber-400/10 text-amber-200',
   EXPERT: 'border-amber-400/30 bg-amber-400/10 text-amber-200',
   MASTER: 'border-orange-400/30 bg-orange-400/10 text-orange-200',
   GRANDMASTER: 'border-rose-400/30 bg-rose-400/10 text-rose-200',
 };
 
-const WORLD_LABELS: Record<string, { label: string; emoji: string }> = {
-  PYTHON_FOREST: { label: 'Python Forest', emoji: '🌿' },
-  JAVASCRIPT_JUNGLE: { label: 'JavaScript Jungle', emoji: '🌴' },
-  TYPESCRIPT_TUNDRA: { label: 'TypeScript Tundra', emoji: '❄️' },
-  RUST_REALM: { label: 'Rust Realm', emoji: '⚙️' },
-  GO_GALAXY: { label: 'Go Galaxy', emoji: '🚀' },
+const WORLD_LABELS: Record<string, { label: string; code: string }> = {
+  PYTHON_FOREST: { label: 'Python Forest', code: 'PY' },
+  JAVASCRIPT_JUNGLE: { label: 'JavaScript Jungle', code: 'JS' },
+  TYPESCRIPT_TUNDRA: { label: 'TypeScript Tundra', code: 'TS' },
+  RUST_REALM: { label: 'Rust Realm', code: 'RS' },
+  GO_GALAXY: { label: 'Go Galaxy', code: 'GO' },
 };
 
 export function DashboardPage() {
@@ -35,7 +35,7 @@ export function DashboardPage() {
   const rankStyle = RANK_STYLES[rank] ?? RANK_STYLES['BEGINNER'] ?? 'border-slate-500/30';
   const world = WORLD_LABELS[profile?.currentWorld ?? ''] ?? {
     label: profile?.currentWorld ?? 'Unknown',
-    emoji: '🌍',
+    code: '--',
   };
   const displayName = profile?.displayName ?? user.username;
   const initials = displayName.slice(0, 1).toUpperCase();
@@ -43,8 +43,8 @@ export function DashboardPage() {
   return (
     <PlayerPageShell
       eyebrow="Command center"
-      title={`Welcome back, ${displayName}`}
-      subtitle="Track your progress, claim daily rewards, and jump back into your next escape mission."
+      title="Mission control"
+      subtitle={`Run your next challenge, ${displayName}. Your active world and progress are ready.`}
       actions={
         <>
           <ActionLink to="/challenges">Play missions</ActionLink>
@@ -61,17 +61,13 @@ export function DashboardPage() {
         className="grid gap-6 lg:grid-cols-[1.4fr_1fr]"
       >
         <GlassPanel className="relative overflow-hidden p-6 sm:p-8">
-          <div
-            aria-hidden="true"
-            className="pointer-events-none absolute -right-16 -top-16 h-48 w-48 rounded-full bg-cyan-400/10 blur-2xl"
-          />
           <div className="relative flex flex-col gap-6 sm:flex-row sm:items-center">
-            <div className="grid h-20 w-20 shrink-0 place-items-center rounded-2xl bg-gradient-to-br from-cyan-300 to-violet-400 text-2xl font-black text-slate-950 shadow-lg shadow-cyan-950/30">
+            <div className="grid h-16 w-16 shrink-0 place-items-center rounded-lg border border-amber-400/40 bg-amber-400 text-xl font-black text-black">
               {initials}
             </div>
             <div className="min-w-0 flex-1">
               <div className="flex flex-wrap items-center gap-2">
-                <p className="text-sm text-slate-400">@{user.username}</p>
+                <p className="font-mono text-sm text-slate-400">@{user.username}</p>
                 <span
                   className={`rounded-full border px-2.5 py-0.5 text-[11px] font-bold uppercase tracking-wide ${rankStyle}`}
                 >
@@ -92,7 +88,7 @@ export function DashboardPage() {
                   </div>
                   <div className="h-2.5 overflow-hidden rounded-full bg-slate-950/80 ring-1 ring-white/10">
                     <div
-                      className="h-full rounded-full bg-gradient-to-r from-cyan-300 via-cyan-400 to-violet-400 transition-all duration-700"
+                      className="h-full rounded-sm bg-amber-400 transition-all duration-700"
                       style={{ width: `${String(xpProgress)}%` }}
                     />
                   </div>
@@ -104,10 +100,10 @@ export function DashboardPage() {
 
         <GlassPanel className="flex flex-col justify-between p-6">
           <div>
-            <p className="text-xs font-bold uppercase tracking-[0.18em] text-violet-300">
+            <p className="font-mono text-xs font-bold uppercase tracking-[0.14em] text-amber-400">
               Current world
             </p>
-            <p className="mt-3 text-3xl">{world.emoji}</p>
+            <p className="mt-3 font-mono text-3xl text-amber-400">{world.code}</p>
             <p className="mt-2 text-xl font-bold text-white">{world.label}</p>
             <p className="mt-2 text-sm text-slate-400">
               Your active storyline and recommended missions live here.
@@ -130,7 +126,7 @@ export function DashboardPage() {
           className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4"
         >
           <StatTile label="Level" value={profile.level} accent="cyan" />
-          <StatTile label="Total XP" value={profile.xp.toLocaleString()} accent="violet" />
+          <StatTile label="Total XP" value={profile.xp.toLocaleString()} accent="amber" />
           <StatTile
             label="Coins"
             value={profile.coins.toLocaleString()}
@@ -176,7 +172,7 @@ export function DashboardPage() {
             </Link>
             <Link
               to="/settings"
-              className="rounded-xl border border-white/10 bg-white/[0.03] p-4 transition hover:border-violet-300/30 hover:bg-white/[0.06]"
+              className="rounded-lg border border-ink-border bg-ink-surface p-4 transition hover:border-amber-400/50 hover:bg-ink-elevated"
             >
               <p className="font-bold text-white">Account settings</p>
               <p className="mt-1 text-xs text-slate-400">Security and preferences</p>
