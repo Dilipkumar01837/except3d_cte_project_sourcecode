@@ -5,6 +5,22 @@ export default {
   theme: {
     extend: {
       colors: {
+        cyan: {
+          100: '#fef3c7',
+          200: '#fde68a',
+          300: '#fcd34d',
+          400: '#fbbf24',
+          500: '#f59e0b',
+          600: '#d97706',
+        },
+        violet: {
+          100: '#fef3c7',
+          200: '#fde68a',
+          300: '#fcd34d',
+          400: '#fbbf24',
+          500: '#f59e0b',
+          600: '#d97706',
+        },
         ink: {
           base: '#0A0A0B',
           surface: '#111113',
