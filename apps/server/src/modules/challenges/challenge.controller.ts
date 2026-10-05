@@ -13,6 +13,7 @@ import {
   type AdaptiveHintType,
 } from './ai-hint.service.js';
 import { resolveChallengeRoom } from '../worlds/challenge-room.service.js';
+import { recordLearningActivity } from '../learning/learning-profile.service.js';
 
 function playerId(req: Request, res: Response): string | undefined {
   const id = req.user?.sub;
@@ -422,6 +423,10 @@ export async function createSubmission(req: Request, res: Response): Promise<voi
       },
     });
   }
+  void recordLearningActivity(userId, {
+    challengeId: challenge.id,
+    language: body.language,
+  });
   sendSuccess(res, { submission }, 202);
 }
 
@@ -468,6 +473,12 @@ export async function runCode(req: Request, res: Response): Promise<void> {
     );
     return;
   }
+  void recordLearningActivity(userId, {
+    challengeId: challenge.id,
+    language: body.language,
+    timeTakenMs: result.executionTimeMs,
+    solved: result.status === 'ACCEPTED',
+  });
   sendSuccess(res, { run: result });
 }
 

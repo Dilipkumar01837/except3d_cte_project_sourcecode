@@ -10,3 +10,5 @@
   and contributors.
 - Kept research claims provisional because no verified participant dataset or statistical report
   is present in the repository.
+- Added evidence-safe final report, performance/accessibility audit plan, presentation outline,
+  and live-demo script; these artifacts do not claim unexecuted measurements.

@@ -65,7 +65,7 @@ export async function generateAiHint(input: {
   return hint.slice(0, 4_000);
 }
 
-function fallbackHint(input: {
+export function fallbackHint(input: {
   hintType: AdaptiveHintType;
   sourceCode: string;
   errorPattern?: string;
@@ -82,6 +82,17 @@ function fallbackHint(input: {
   if (input.hintType === 'SPECIFIC')
     return 'Inspect the condition that controls the failing path and adjust it only after verifying it against the challenge constraints.';
   return 'Look at the smallest section of code that decides the result. Check its condition, inputs, and the value it returns.';
+}
+
+export function chooseAdaptiveHintType(
+  languageSkill: number,
+  attemptsBefore: number,
+  requestedType?: AdaptiveHintType,
+): AdaptiveHintType {
+  return (
+    requestedType ??
+    (languageSkill <= 2 ? 'CONCEPTUAL' : attemptsBefore >= 3 ? 'DEBUGGING' : 'DIRECTIONAL')
+  );
 }
 
 export async function generateAdaptiveHint(input: {
@@ -115,9 +126,7 @@ export async function generateAdaptiveHint(input: {
   });
   const skillLevels = (profile?.skillLevels ?? {}) as Record<string, unknown>;
   const languageSkill = Number(skillLevels[input.language] ?? 1);
-  const hintType =
-    input.requestedType ??
-    (languageSkill <= 2 ? 'CONCEPTUAL' : attemptsBefore >= 3 ? 'DEBUGGING' : 'DIRECTIONAL');
+  const hintType = chooseAdaptiveHintType(languageSkill, attemptsBefore, input.requestedType);
   const errorPatterns = (profile?.errorPatterns ?? {}) as Record<string, unknown>;
   const errorPattern = Object.entries(errorPatterns).sort(
     (a, b) => Number(b[1]) - Number(a[1]),

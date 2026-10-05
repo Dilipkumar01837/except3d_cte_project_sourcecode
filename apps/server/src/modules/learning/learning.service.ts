@@ -2,6 +2,7 @@ import crypto from 'node:crypto';
 import type { Prisma } from '@prisma/client';
 import { prisma } from '../../shared/lib/prisma.js';
 import { recordEvents } from '../telemetry/telemetry.service.js';
+import { recordLearningActivity } from './learning-profile.service.js';
 
 const publicQuestion = {
   id: true,
@@ -96,6 +97,10 @@ export async function submitAssessment(
         payload: { assessmentId, score, maxScore, type: assessment.type },
       },
     ],
+  });
+  void recordLearningActivity(userId, {
+    timeTakenMs,
+    solved: score === maxScore,
   });
   return attempt;
 }

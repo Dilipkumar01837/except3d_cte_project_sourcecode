@@ -612,6 +612,8 @@ model UserLearningProfile {
   userId                 String   @unique
   skillLevels            Json     @default("{}")
   errorPatterns          Json     @default("{}")
+  hintHistorySummary     Json     @default("{}")
+  challengeCompletionHistory Json  @default("[]")
   preferredLearningStyle String?
   personalizedHintsOptOut Boolean  @default(false)
   currentStreak          Int      @default(0)

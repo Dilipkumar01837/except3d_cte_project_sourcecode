@@ -7,6 +7,8 @@ CREATE TABLE "UserLearningProfile" (
     "userId" TEXT NOT NULL,
     "skillLevels" JSONB NOT NULL DEFAULT '{}',
     "errorPatterns" JSONB NOT NULL DEFAULT '{}',
+    "hintHistorySummary" JSONB NOT NULL DEFAULT '{}',
+    "challengeCompletionHistory" JSONB NOT NULL DEFAULT '[]',
     "preferredLearningStyle" TEXT,
     "personalizedHintsOptOut" BOOLEAN NOT NULL DEFAULT false,
     "currentStreak" INTEGER NOT NULL DEFAULT 0,
