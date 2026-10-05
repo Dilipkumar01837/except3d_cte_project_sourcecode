@@ -16,6 +16,10 @@ import { telemetryRouter } from '../modules/telemetry/index.js';
 import { errorHandler } from '../shared/middleware/error-handler.js';
 import { generalRateLimit } from '../shared/middleware/rate-limit.js';
 import { requestLogger } from '../shared/middleware/request-logger.js';
+import { sceneAdminRouter, sceneRouter } from '../modules/scenes/scene.routes.js';
+import { socialRouter } from '../modules/social/social.routes.js';
+import { notificationRouter } from '../modules/notifications/notification.routes.js';
+import { learningAdminRouter, learningRouter } from '../modules/learning/learning.routes.js';
 
 export function createApp(): ReturnType<typeof express> {
   const app = express();
@@ -62,6 +66,12 @@ export function createApp(): ReturnType<typeof express> {
   app.use(`${API_BASE_PATH}/player/daily-reward`, dailyRewardRouter);
   app.use(`${API_BASE_PATH}/duels`, duelRouter);
   app.use(`${API_BASE_PATH}/telemetry`, telemetryRouter);
+  app.use(`${API_BASE_PATH}/player`, sceneRouter);
+  app.use(`${API_BASE_PATH}/admin`, sceneAdminRouter);
+  app.use(`${API_BASE_PATH}/social`, socialRouter);
+  app.use(`${API_BASE_PATH}/notifications`, notificationRouter);
+  app.use(`${API_BASE_PATH}/learning`, learningRouter);
+  app.use(`${API_BASE_PATH}/admin`, learningAdminRouter);
 
   app.use(errorHandler);
 

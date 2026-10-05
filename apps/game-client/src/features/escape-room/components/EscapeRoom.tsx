@@ -15,6 +15,7 @@ import { PuzzleTerminal } from './PuzzleTerminal';
 import { RoomCanvas } from './RoomCanvas';
 import { RoomCompletionOverlay } from './RoomCompletionOverlay';
 import { RoomHUD } from './RoomHUD';
+import { EscapeRoom3D } from './EscapeRoom3D';
 
 const MOVE_SPEED = 5.5;
 type Direction = 'up' | 'down' | 'left' | 'right';
@@ -75,6 +76,9 @@ export function EscapeRoom({ world, level, justCleared, onRefresh }: EscapeRoomP
   }, [config]);
 
   const [modal, setModal] = useState<Modal>('none');
+  const [threeEnabled, setThreeEnabled] = useState(
+    () => localStorage.getItem('cte:3d-room') !== 'off',
+  );
   const modalOpen = modal !== 'none';
   const modalRef = useRef(modalOpen);
   useEffect(() => {
@@ -273,13 +277,39 @@ export function EscapeRoom({ world, level, justCleared, onRefresh }: EscapeRoomP
       />
 
       <main className="mx-auto max-w-6xl px-4 py-5">
-        <RoomCanvas
-          config={config}
-          state={state}
-          player={player}
-          activeObjectId={activeObject?.id ?? null}
-          onActivate={activate}
-        />
+        <div className="mb-3 flex justify-end">
+          <button
+            type="button"
+            onClick={() => {
+              const next = !threeEnabled;
+              setThreeEnabled(next);
+              localStorage.setItem('cte:3d-room', next ? 'on' : 'off');
+            }}
+            className="rounded-lg border border-white/15 px-3 py-2 text-xs font-bold text-slate-300"
+          >
+            {threeEnabled ? 'Use 2D room' : 'Try 3D room'}
+          </button>
+        </div>
+        {threeEnabled ? (
+          <EscapeRoom3D
+            level={level}
+            completed={state.isCompleted}
+            onChallenge={startChallenge}
+            onRefresh={onRefresh}
+            onFallback={() => {
+              setThreeEnabled(false);
+              localStorage.setItem('cte:3d-room', 'off');
+            }}
+          />
+        ) : (
+          <RoomCanvas
+            config={config}
+            state={state}
+            player={player}
+            activeObjectId={activeObject?.id ?? null}
+            onActivate={activate}
+          />
+        )}
         <p className="mt-3 text-center text-xs text-slate-500">
           {state.isPlayable
             ? 'Move with WASD or the arrow keys. Approach a glowing object and press E to interact.'

@@ -4,6 +4,7 @@ import { Link, NavLink, Outlet, useNavigate } from 'react-router-dom';
 import { APP_NAME } from '@code-to-escape/shared';
 import { useAuthStore } from '@/features/auth/store/auth.store';
 import { initTelemetry, resetTelemetry } from '@/shared/lib/telemetry';
+import { listenForForegroundPush } from '@/shared/lib/push-notifications';
 
 const publicLinks = [
   { to: '/', label: 'Home' },
@@ -16,6 +17,7 @@ const privateLinks = [
   { to: '/duels', label: 'Duels' },
   { to: '/explore', label: 'Explore' },
   { to: '/challenges', label: 'Challenges' },
+  { to: '/friends', label: 'Friends' },
 ];
 
 function NavigationLink({
@@ -57,6 +59,23 @@ export function AppLayout() {
       resetTelemetry();
     }
   }, [isAuthenticated, userId]);
+
+  useEffect(() => {
+    if (!isAuthenticated) return;
+    let unsubscribe: () => void = () => {};
+    void listenForForegroundPush((payload) => {
+      window.dispatchEvent(new CustomEvent('cte:notification', { detail: payload }));
+      if (Notification.permission === 'granted' && payload.notification)
+        new Notification(payload.notification.title ?? 'Code to Escape', {
+          body: payload.notification.body,
+        });
+    }).then((cleanup) => {
+      unsubscribe = cleanup;
+    });
+    return () => {
+      unsubscribe();
+    };
+  }, [isAuthenticated]);
 
   const finishLogout = async (): Promise<void> => {
     await logout();

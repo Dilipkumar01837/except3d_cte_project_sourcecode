@@ -85,4 +85,7 @@ export const env = {
   googleClientSecret: getEnv('GOOGLE_CLIENT_SECRET', ''),
   githubClientId: getEnv('GITHUB_CLIENT_ID', ''),
   githubClientSecret: getEnv('GITHUB_CLIENT_SECRET', ''),
+  firebaseAdminProjectId: getEnv('FIREBASE_ADMIN_PROJECT_ID', ''),
+  firebaseAdminClientEmail: getEnv('FIREBASE_ADMIN_CLIENT_EMAIL', ''),
+  firebaseAdminPrivateKey: getEnv('FIREBASE_ADMIN_PRIVATE_KEY', '').replace(/\\n/g, '\n'),
 };

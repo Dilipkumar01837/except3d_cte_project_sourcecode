@@ -37,13 +37,37 @@ export async function getConsent(userId: string): Promise<TelemetryConsent> {
  * collection but does not delete already-collected events.
  */
 export async function setConsent(userId: string, optIn: boolean): Promise<TelemetryConsent> {
-  const updated = await prisma.profile.updateMany({
-    where: { userId },
-    data: {
-      telemetryOptIn: optIn,
-      telemetryConsentAt: new Date(),
-      telemetryConsentVersion: TELEMETRY_CONSENT_VERSION,
-    },
+  const now = new Date();
+  const updated = await prisma.$transaction(async (tx) => {
+    const result = await tx.profile.updateMany({
+      where: { userId },
+      data: {
+        telemetryOptIn: optIn,
+        telemetryConsentAt: now,
+        telemetryConsentVersion: TELEMETRY_CONSENT_VERSION,
+      },
+    });
+    await tx.userConsent.upsert({
+      where: { userId },
+      create: {
+        userId,
+        telemetry: optIn,
+        consentAt: now,
+        withdrawnAt: optIn ? null : now,
+        version: TELEMETRY_CONSENT_VERSION,
+      },
+      update: {
+        telemetry: optIn,
+        consentAt: now,
+        withdrawnAt: optIn ? null : now,
+        version: TELEMETRY_CONSENT_VERSION,
+      },
+    });
+    if (!optIn) {
+      await tx.telemetryEvent.deleteMany({ where: { userId } });
+      await tx.userEvent.deleteMany({ where: { userId } });
+    }
+    return result;
   });
   if (updated.count === 0) {
     // A profile is created with the account, so this only happens for an
@@ -73,6 +97,13 @@ export async function recordEvents(userId: string, input: RecordEventsInput): Pr
       name: event.name,
       payload: event.payload as Prisma.InputJsonValue | undefined,
       sessionId: input.sessionId,
+    })),
+  });
+  await prisma.userEvent.createMany({
+    data: input.events.map((event) => ({
+      userId,
+      eventType: event.name,
+      metadata: event.payload as Prisma.InputJsonValue | undefined,
     })),
   });
   return result.count;

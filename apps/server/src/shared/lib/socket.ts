@@ -25,6 +25,10 @@ export function emitToUser(userId: string, event: string, data: unknown): void {
   _io?.to(`user:${userId}`).emit(event, data);
 }
 
+export function emitToDuel(duelId: string, event: string, data: unknown): void {
+  _io?.of('/duel').to(`duel:${duelId}`).emit(event, data);
+}
+
 /** Disconnects every live socket for a user. Called when an account is suspended. */
 export function disconnectUserSockets(userId: string): number {
   let count = 0;

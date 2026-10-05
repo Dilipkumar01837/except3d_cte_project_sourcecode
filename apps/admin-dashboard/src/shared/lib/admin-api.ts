@@ -119,6 +119,29 @@ export interface AdminAchievement {
   _count: { players: number };
 }
 
+export interface LearningAnalytics {
+  from: string;
+  to: string;
+  worlds: Array<{
+    worldId: string;
+    worldName: string;
+    pairedUsers: number;
+    averageImprovement: number;
+    medianImprovement: number;
+    averageAssessmentTimeMs: number;
+  }>;
+  experimentVariants: Array<{ variant: string; users: number }>;
+}
+export interface AdminScene {
+  id: string;
+  levelId: string;
+  modelUrl: string | null;
+  objects: unknown;
+  settings: unknown;
+  isPublished: boolean;
+  level: { title: string; world: { name: string } };
+}
+
 function data<T>(res: { data: { data: T } }): T {
   return res.data.data;
 }
@@ -127,6 +150,47 @@ function data<T>(res: { data: { data: T } }): T {
 
 export const adminApi = {
   getOverview: () => apiClient.get('/admin/overview').then(data<OverviewStats>),
+
+  getLearningAnalytics: (params: {
+    from?: string;
+    to?: string;
+    worldId?: string;
+    experimentId?: string;
+    variant?: string;
+  }) => apiClient.get('/admin/analytics', { params }).then(data<LearningAnalytics>),
+  exportLearningAnalytics: (params: { from?: string; to?: string; eventType?: string }) =>
+    apiClient
+      .get('/admin/analytics/export', { params, responseType: 'blob' })
+      .then((response) => response.data as Blob),
+  listExperiments: () =>
+    apiClient
+      .get('/admin/experiments')
+      .then(
+        data<{
+          experiments: Array<{
+            id: string;
+            key: string;
+            name: string;
+            isActive: boolean;
+            variants: string[];
+          }>;
+        }>,
+      ),
+  createExperiment: (payload: {
+    key: string;
+    name: string;
+    description?: string;
+    variants: string[];
+    isActive: boolean;
+  }) =>
+    apiClient
+      .post('/admin/experiments', payload)
+      .then(data<{ experiment: { id: string; key: string } }>),
+  listScenes: () => apiClient.get('/admin/scenes').then(data<{ scenes: AdminScene[] }>),
+  saveScene: (
+    levelId: string,
+    payload: { modelUrl?: string; objects: unknown; settings?: unknown; isPublished: boolean },
+  ) => apiClient.put(`/admin/scenes/${levelId}`, payload).then(data<{ scene: AdminScene }>),
 
   listUsers: (params: { page?: number; limit?: number; search?: string; role?: string }) =>
     apiClient

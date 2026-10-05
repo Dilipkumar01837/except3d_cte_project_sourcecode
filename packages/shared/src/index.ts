@@ -19,6 +19,15 @@ export const TELEMETRY_EVENT_NAMES = [
   'hint_reveal',
   'duel_join',
   'daily_reward_claim',
+  'code_run',
+  'test_case_result',
+  'hint_request',
+  'hint_acceptance',
+  'challenge_time_spent',
+  'submission_attempt',
+  'execution_error',
+  'duel_participation',
+  'assessment_score',
 ] as const;
 
 export type TelemetryEventName = (typeof TELEMETRY_EVENT_NAMES)[number];

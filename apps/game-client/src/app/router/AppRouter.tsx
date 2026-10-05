@@ -18,6 +18,8 @@ import { EscapeRoomPage } from '@/features/escape-room/pages/EscapeRoomPage';
 import { LeaderboardPage } from '@/features/leaderboard/components/LeaderboardPage';
 import { DuelLobbyPage } from '@/features/duels/components/DuelLobbyPage';
 import { DuelArenaPage } from '@/features/duels/components/DuelArenaPage';
+import { AssessmentPage } from '@/features/assessments/components/AssessmentPage';
+import { FriendsPage } from '@/features/social/components/FriendsPage';
 
 export function AppRouter() {
   return (
@@ -110,6 +112,22 @@ export function AppRouter() {
           element={
             <ProtectedRoute>
               <DuelArenaPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/assessments"
+          element={
+            <ProtectedRoute>
+              <AssessmentPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/friends"
+          element={
+            <ProtectedRoute>
+              <FriendsPage />
             </ProtectedRoute>
           }
         />

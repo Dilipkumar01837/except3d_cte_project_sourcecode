@@ -86,6 +86,23 @@ model User {
   aiHintHistory  AiHintHistory[]
   roomKeys       PlayerRoomKey[]
   telemetryEvents TelemetryEvent[]
+  userEvents      UserEvent[]
+  userConsent     UserConsent?
+  assessmentAttempts AssessmentAttempt[]
+  experimentAssignments ExperimentAssignment[]
+  sceneStates      PlayerSceneState[]
+  sentFriendRequests FriendRequest[] @relation("FriendRequestSender")
+  receivedFriendRequests FriendRequest[] @relation("FriendRequestReceiver")
+  friendshipA Friendship[] @relation("FriendshipA")
+  friendshipB Friendship[] @relation("FriendshipB")
+  blockedUsers BlockedUser[] @relation("Blocker")
+  blockedBy BlockedUser[] @relation("Blocked")
+  sentMessages Message[] @relation("MessageSender")
+  receivedMessages Message[] @relation("MessageRecipient")
+  activities ActivityFeed[]
+  rating PlayerRating?
+  matchHistory MatchHistory[] @relation("MatchPlayer")
+  fcmTokens UserFcmToken[]
 
   @@index([email])
   @@index([username])
@@ -126,6 +143,9 @@ model Profile {
   telemetryOptIn        Boolean   @default(false)
   telemetryConsentAt    DateTime?
   telemetryConsentVersion String?
+  friendsVisible Boolean @default(true)
+  activityVisible Boolean @default(true)
+  messagePolicy String @default("FRIENDS")
   createdAt     DateTime   @default(now())
   updatedAt     DateTime   @updatedAt
 
@@ -207,6 +227,9 @@ enum NotificationType {
   LEVEL_COMPLETED
   DAILY_REWARD
   FRIEND_REQUEST
+  FRIEND_ACCEPTED
+  CHAT_MESSAGE
+  MATCH_FOUND
   SYSTEM
 }
 
@@ -270,6 +293,7 @@ model GameWorld {
 
   levels     GameLevel[]
   progress   PlayerWorldProgress[]
+  assessments Assessment[]
   roomKeys   RoomKey[]
   roomLocks  RoomLock[]
 }
@@ -365,6 +389,9 @@ model GameLevel {
   /// The lock guarding this level, if any. `levelId` on RoomLock owns the foreign
   /// key; this is the inverse side.
   guardedByRoomLock RoomLock? @relation("guardedRoomLock")
+  assessments Assessment[]
+  sceneDefinition SceneDefinition?
+  sceneStates PlayerSceneState[]
   @@unique([worldId, number])
   @@index([worldId, isPublished])
 }
@@ -673,6 +700,252 @@ model AdminAuditLog {
   @@index([adminId, createdAt])
   @@index([action, createdAt])
   @@index([targetType, targetId])
+}
+
+enum AssessmentType {
+  PRE
+  POST
+}
+
+model Assessment {
+  id          String         @id @default(uuid())
+  worldId     String?
+  levelId     String?
+  type        AssessmentType
+  title       String
+  description String?
+  isPublished Boolean        @default(false)
+  createdAt   DateTime       @default(now())
+  updatedAt   DateTime       @updatedAt
+
+  world    GameWorld? @relation(fields: [worldId], references: [id], onDelete: Cascade)
+  level    GameLevel? @relation(fields: [levelId], references: [id], onDelete: Cascade)
+  questions AssessmentQuestion[]
+  attempts AssessmentAttempt[]
+
+  @@index([worldId, type, isPublished])
+  @@index([levelId, type, isPublished])
+}
+
+model AssessmentQuestion {
+  id           String   @id @default(uuid())
+  assessmentId String
+  kind         String
+  prompt       String
+  options      Json?
+  answer       Json
+  points       Int      @default(1)
+  objective    String?
+  sortOrder    Int      @default(0)
+
+  assessment Assessment @relation(fields: [assessmentId], references: [id], onDelete: Cascade)
+  @@index([assessmentId, sortOrder])
+}
+
+model AssessmentAttempt {
+  id           String   @id @default(uuid())
+  assessmentId String
+  userId       String
+  score        Int
+  maxScore     Int
+  timeTakenMs  Int
+  attemptNumber Int
+  responses    Json
+  startedAt    DateTime @default(now())
+  completedAt  DateTime @default(now())
+
+  assessment Assessment @relation(fields: [assessmentId], references: [id], onDelete: Cascade)
+  user       User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  @@index([userId, assessmentId, completedAt])
+  @@index([assessmentId, completedAt])
+}
+
+model Experiment {
+  id          String   @id @default(uuid())
+  key         String   @unique
+  name        String
+  description String?
+  variants    Json
+  isActive    Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  assignments ExperimentAssignment[]
+  @@index([isActive, createdAt])
+}
+
+model ExperimentAssignment {
+  id           String   @id @default(uuid())
+  experimentId String
+  userId       String
+  variant      String
+  assignedAt   DateTime @default(now())
+  metadata     Json?
+
+  experiment Experiment @relation(fields: [experimentId], references: [id], onDelete: Cascade)
+  user       User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  @@unique([experimentId, userId])
+  @@index([experimentId, variant, assignedAt])
+  @@index([userId, assignedAt])
+}
+
+model UserEvent {
+  id        String   @id @default(uuid())
+  userId    String
+  eventType String
+  metadata  Json?
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  @@index([userId, createdAt])
+  @@index([eventType, createdAt])
+}
+
+model UserConsent {
+  id          String   @id @default(uuid())
+  userId      String   @unique
+  telemetry   Boolean  @default(false)
+  consentAt   DateTime?
+  withdrawnAt DateTime?
+  version     String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  @@index([telemetry, consentAt])
+}
+
+enum FriendRequestStatus {
+  PENDING
+  ACCEPTED
+  REJECTED
+}
+
+model Friendship {
+  id        String   @id @default(uuid())
+  userAId   String
+  userBId   String
+  createdAt DateTime @default(now())
+  userA User @relation("FriendshipA", fields: [userAId], references: [id], onDelete: Cascade)
+  userB User @relation("FriendshipB", fields: [userBId], references: [id], onDelete: Cascade)
+  @@unique([userAId, userBId])
+  @@index([userAId, createdAt])
+  @@index([userBId, createdAt])
+}
+
+model FriendRequest {
+  id         String @id @default(uuid())
+  senderId   String
+  receiverId String
+  status     FriendRequestStatus @default(PENDING)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+  sender User @relation("FriendRequestSender", fields: [senderId], references: [id], onDelete: Cascade)
+  receiver User @relation("FriendRequestReceiver", fields: [receiverId], references: [id], onDelete: Cascade)
+  @@unique([senderId, receiverId])
+  @@index([receiverId, status, createdAt])
+  @@index([senderId, status, createdAt])
+}
+
+model BlockedUser {
+  id        String @id @default(uuid())
+  blockerId String
+  blockedId String
+  createdAt DateTime @default(now())
+  blocker User @relation("Blocker", fields: [blockerId], references: [id], onDelete: Cascade)
+  blocked User @relation("Blocked", fields: [blockedId], references: [id], onDelete: Cascade)
+  @@unique([blockerId, blockedId])
+  @@index([blockedId])
+}
+
+model Message {
+  id          String @id @default(uuid())
+  senderId    String
+  recipientId String
+  body        String
+  createdAt   DateTime @default(now())
+  readAt      DateTime?
+  sender User @relation("MessageSender", fields: [senderId], references: [id], onDelete: Cascade)
+  recipient User @relation("MessageRecipient", fields: [recipientId], references: [id], onDelete: Cascade)
+  @@index([senderId, recipientId, createdAt])
+  @@index([recipientId, readAt, createdAt])
+}
+
+model ActivityFeed {
+  id        String @id @default(uuid())
+  userId    String
+  eventType String
+  payload   Json?
+  createdAt DateTime @default(now())
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  @@index([userId, createdAt])
+  @@index([eventType, createdAt])
+}
+
+model PlayerRating {
+  id        String @id @default(uuid())
+  userId    String @unique
+  rating    Int @default(1000)
+  wins      Int @default(0)
+  losses    Int @default(0)
+  season    String @default("2026-S1")
+  updatedAt DateTime @updatedAt
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  @@index([season, rating])
+}
+
+model MatchHistory {
+  id         String @id @default(uuid())
+  duelId     String?
+  userId     String
+  opponentId String
+  result     String
+  ratingBefore Int
+  ratingAfter Int
+  createdAt DateTime @default(now())
+  user User @relation("MatchPlayer", fields: [userId], references: [id], onDelete: Cascade)
+  @@index([userId, createdAt])
+  @@index([opponentId, createdAt])
+}
+
+model UserFcmToken {
+  id         String   @id @default(uuid())
+  userId     String
+  token      String   @unique
+  deviceInfo String?
+  enabled    Boolean  @default(true)
+  createdAt  DateTime @default(now())
+  lastUsedAt DateTime @default(now())
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  @@index([userId, enabled, lastUsedAt])
+}
+
+model SceneDefinition {
+  id          String   @id @default(uuid())
+  levelId     String   @unique
+  modelUrl    String?
+  objects     Json
+  settings    Json?
+  isPublished Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  level GameLevel @relation(fields: [levelId], references: [id], onDelete: Cascade)
+  @@index([isPublished, updatedAt])
+}
+
+model PlayerSceneState {
+  id              String   @id @default(uuid())
+  userId          String
+  levelId         String
+  playerPosition  Json
+  unlockedObjects Json
+  sceneProgress   Json
+  updatedAt       DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  level GameLevel @relation(fields: [levelId], references: [id], onDelete: Cascade)
+  @@unique([userId, levelId])
+  @@index([userId, updatedAt])
+  @@index([levelId, updatedAt])
 }
 
 // ─────────────────────────────────────────

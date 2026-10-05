@@ -7,6 +7,11 @@ import { applyTelemetryConsent } from '@/shared/lib/telemetry';
 import { PlayerPageShell } from '@/shared/components/layout/PlayerPageShell';
 import { GlassPanel, MetaRow, PanelHeading } from '@/shared/components/ui/player-ui';
 import { FormButton } from '@/shared/components/ui/FormButton';
+import {
+  disablePushNotifications,
+  enablePushNotifications,
+  pushConfigured,
+} from '@/shared/lib/push-notifications';
 
 export function SettingsPage() {
   const { user, logout } = useAuthStore();
@@ -17,6 +22,8 @@ export function SettingsPage() {
   const [telemetryOn, setTelemetryOn] = useState(false);
   const [savingTelemetry, setSavingTelemetry] = useState(false);
   const [telemetryLoaded, setTelemetryLoaded] = useState(false);
+  const [pushOn, setPushOn] = useState(false);
+  const [pushBusy, setPushBusy] = useState(false);
 
   useEffect(() => {
     void getTelemetryConsent()
@@ -40,6 +47,19 @@ export function SettingsPage() {
       .finally(() => {
         setSavingTelemetry(false);
       });
+  };
+
+  const handlePushToggle = () => {
+    setPushBusy(true);
+    void (
+      pushOn
+        ? disablePushNotifications().then(() => {
+            setPushOn(false);
+          })
+        : enablePushNotifications().then(setPushOn)
+    ).finally(() => {
+      setPushBusy(false);
+    });
   };
 
   const handleLogout = () => {
@@ -82,6 +102,26 @@ export function SettingsPage() {
 
       <GlassPanel className="p-6">
         <PanelHeading
+          title="Push notifications"
+          description="Optional browser alerts for friend requests, chat, duel matches, and achievements when you are offline."
+        />
+        <FormButton
+          variant="ghost"
+          fullWidth={false}
+          disabled={!pushConfigured() || pushBusy}
+          onClick={handlePushToggle}
+        >
+          {pushOn ? 'Disable push notifications' : 'Enable push notifications'}
+        </FormButton>
+        {!pushConfigured() && (
+          <p className="mt-3 text-xs text-slate-500">
+            Push notifications are not configured for this environment.
+          </p>
+        )}
+      </GlassPanel>
+
+      <GlassPanel className="p-6">
+        <PanelHeading
           title="Session"
           description="Sign out from this browser. Your progress stays saved on the server."
         />
@@ -112,6 +152,10 @@ export function SettingsPage() {
           <span className="text-sm text-slate-400">
             {telemetryOn ? 'Currently on' : 'Currently off'}
           </span>
+          <p className="basis-full text-xs text-slate-500">
+            You can withdraw at any time; withdrawing deletes your stored telemetry and research
+            events.
+          </p>
         </div>
       </GlassPanel>
 

@@ -9,6 +9,7 @@ import { executeWithRunner, type JudgeExecutionResult } from './judge-execution.
 import { markHintsResolved } from './hint-outcome.js';
 import { resolveDuel } from '../duels/duel-resolve.js';
 import { resolveChallengeRoom } from '../worlds/challenge-room.service.js';
+import { publishDuelEvent } from '../duels/duel-realtime.js';
 
 export async function executeSubmission(submissionId: string): Promise<void> {
   const submission = await prisma.submission.findUnique({
@@ -314,6 +315,19 @@ export async function executeSubmission(submissionId: string): Promise<void> {
     xpEarned: reward.xp,
     coinsEarned: reward.coins,
   });
+  if (submission.duelId) {
+    await publishDuelEvent(submission.duelId, 'duel:progress-update', {
+      duelId: submission.duelId,
+      userId: submission.userId,
+      passed,
+      total: submission.challenge.testCases.length,
+      elapsedMs: result.executionTimeMs ?? 0,
+      language: submission.language,
+      status: 'COMPLETED',
+      score: reward.score,
+      submissionStatus: result.status,
+    }).catch(() => undefined);
+  }
 
   if (submission.duelId && result.status === 'ACCEPTED') {
     const resolution = await resolveDuel(submission.duelId);
@@ -325,6 +339,7 @@ export async function executeSubmission(submissionId: string): Promise<void> {
       };
       emitToUser(resolution.creatorId, 'duel:completed', event);
       if (resolution.opponentId) emitToUser(resolution.opponentId, 'duel:completed', event);
+      await publishDuelEvent(submission.duelId, 'duel:result', event).catch(() => undefined);
     }
   }
 }

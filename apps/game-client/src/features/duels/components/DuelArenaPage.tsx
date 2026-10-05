@@ -1,5 +1,4 @@
-import { io } from 'socket.io-client';
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { MonacoCodeEditor } from '@/features/challenges/components/MonacoCodeEditor';
 import {
@@ -10,6 +9,7 @@ import {
 } from '@/features/challenges/lib/challenge-api';
 import { PlayerPageShell } from '@/shared/components/layout/PlayerPageShell';
 import { duelApi, type Duel } from '../lib/duel-api';
+import { useDuelRealtime } from '../lib/use-duel-realtime';
 
 const defaultCode: Record<Language, string> = {
   PYTHON: '# Write your solution here\n',
@@ -31,6 +31,32 @@ export function DuelArenaPage() {
   const [winnerId, setWinnerId] = useState<string>();
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
+  const [ready, setReady] = useState(false);
+  const [chatInput, setChatInput] = useState('');
+
+  const userId = (() => {
+    try {
+      const token = localStorage.getItem('access_token');
+      return token
+        ? (JSON.parse(atob(token.split('.')[1] ?? '')) as { sub?: string }).sub
+        : undefined;
+    } catch {
+      return undefined;
+    }
+  })();
+  const handleResult = useCallback((event: { winnerId: string | null; status: string }) => {
+    setWinnerId(event.winnerId ?? undefined);
+    setDuel((current) =>
+      current
+        ? {
+            ...current,
+            status: event.status as Duel['status'],
+            completedAt: new Date().toISOString(),
+          }
+        : current,
+    );
+  }, []);
+  const realtime = useDuelRealtime(duelId, userId, handleResult);
 
   useEffect(() => {
     if (!duelId) return;
@@ -50,59 +76,19 @@ export function DuelArenaPage() {
       });
   }, [duelId]);
 
-  useEffect(() => {
-    const token = localStorage.getItem('access_token');
-    if (!token) return;
-    const socket = io({ auth: { token } });
-    socket.on('duel:started', (event: { duelId: string }) => {
-      if (event.duelId === duelId)
-        setDuel((current) => (current ? { ...current, status: 'ACTIVE' } : current));
-    });
-    socket.on('duel:completed', (event: { duelId: string; winnerId: string }) => {
-      if (event.duelId === duelId) {
-        setWinnerId(event.winnerId);
-        setDuel((current) =>
-          current
-            ? { ...current, status: 'COMPLETED', completedAt: new Date().toISOString() }
-            : current,
-        );
-      }
-    });
-    return () => {
-      socket.disconnect();
-    };
-  }, [duelId]);
-
-  // The execution worker is a separate process, so the `duel:completed` event it
-  // emits never reaches this client: the in-memory Socket.IO server only exists
-  // in the HTTP process. Poll the persisted duel while it can still change so the
-  // winner and final results appear regardless of which process resolved it.
-  const duelStatus = duel?.status;
-  useEffect(() => {
-    if (!duelId) return;
-    if (duelStatus && duelStatus !== 'OPEN' && duelStatus !== 'ACTIVE') return;
-    const timer = window.setInterval(() => {
-      void duelApi
-        .get(duelId)
-        .then((item) => {
-          setDuel(item);
-          setWinnerId(item.winnerId ?? undefined);
-        })
-        .catch(() => {
-          // Transient read failure; the next tick retries.
-        });
-    }, 2000);
-    return () => {
-      window.clearInterval(timer);
-    };
-  }, [duelId, duelStatus]);
-
   const submit = async () => {
     if (!duelId || !code.trim() || busy || duel?.status !== 'ACTIVE') return;
     setBusy(true);
     setError('');
     try {
       setSubmission(await duelApi.submit(duelId, language, code));
+      realtime.emitProgress({
+        passed: 0,
+        total: challenge?.testCases.length ?? 0,
+        elapsedMs: 0,
+        language,
+        status: 'SUBMITTED',
+      });
     } catch {
       setError('Unable to submit your duel solution.');
     } finally {
@@ -203,7 +189,10 @@ export function DuelArenaPage() {
               value={code}
               language={language}
               fontSize={14}
-              onChange={setCode}
+              onChange={(nextCode) => {
+                setCode(nextCode);
+                realtime.emitCode(nextCode, language);
+              }}
               readOnly={duel.status !== 'ACTIVE'}
             />
           </div>
@@ -215,6 +204,94 @@ export function DuelArenaPage() {
           )}
         </section>
       </div>
+      <section className="mt-5 grid gap-5 lg:grid-cols-[1fr_1fr]">
+        <div className="rounded-2xl border border-cyan-300/20 bg-cyan-300/[.05] p-4">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <h2 className="font-bold text-white">Live duel control</h2>
+              <p className="mt-1 text-xs text-slate-400">
+                {realtime.connected ? 'Connected' : 'Connecting'} ·{' '}
+                {realtime.state?.spectators ?? 0} spectator(s)
+              </p>
+            </div>
+            <button
+              type="button"
+              disabled={duel.status !== 'ACTIVE'}
+              onClick={() => {
+                setReady((current) => !current);
+                realtime.setReady(!ready);
+              }}
+              className="rounded-lg bg-cyan-300 px-4 py-2 text-sm font-bold text-slate-950 disabled:opacity-50"
+            >
+              {ready ? 'Ready' : 'Ready up'}
+            </button>
+          </div>
+          {realtime.countdown !== undefined && (
+            <p className="mt-4 text-center text-4xl font-black text-cyan-200">
+              {realtime.countdown}
+            </p>
+          )}
+          <div className="mt-4 flex items-center justify-between text-sm text-slate-300">
+            <span>Opponent progress</span>
+            <span>
+              {realtime.opponentProgress?.passed ?? 0}/{realtime.opponentProgress?.total ?? 0} tests
+              · {realtime.opponentProgress?.status ?? 'IDLE'}
+            </span>
+          </div>
+          <div className="mt-2 h-2 overflow-hidden rounded-full bg-slate-800">
+            <div
+              className="h-full bg-emerald-300 transition-all"
+              style={{
+                width: `${String(realtime.opponentProgress?.total ? Math.min(100, (realtime.opponentProgress.passed / realtime.opponentProgress.total) * 100) : 0)}%`,
+              }}
+            />
+          </div>
+        </div>
+        <div className="rounded-2xl border border-white/10 bg-slate-950 p-4">
+          <div className="mb-3 flex items-center justify-between">
+            <h2 className="font-bold text-white">Opponent code</h2>
+            <span className="text-xs text-slate-500">read only</span>
+          </div>
+          <pre className="max-h-48 overflow-auto whitespace-pre-wrap rounded-lg bg-black/30 p-3 font-mono text-xs text-slate-300">
+            {realtime.opponentCode || 'Waiting for the opponent to type...'}
+          </pre>
+          <div className="mt-3 flex gap-2">
+            <input
+              value={chatInput}
+              onChange={(event) => {
+                setChatInput(event.target.value);
+              }}
+              onKeyDown={(event) => {
+                if (event.key === 'Enter' && chatInput.trim()) {
+                  realtime.sendChat(chatInput);
+                  setChatInput('');
+                }
+              }}
+              placeholder="Spectator chat"
+              className="min-w-0 flex-1 rounded-lg border border-white/10 bg-slate-900 px-3 py-2 text-xs text-white"
+            />
+            <button
+              type="button"
+              onClick={() => {
+                if (chatInput.trim()) {
+                  realtime.sendChat(chatInput);
+                  setChatInput('');
+                }
+              }}
+              className="rounded-lg border border-white/10 px-3 text-xs text-slate-200"
+            >
+              Send
+            </button>
+          </div>
+          <div className="mt-2 max-h-20 overflow-auto text-xs text-slate-400">
+            {realtime.messages.map((message, index) => (
+              <p key={`${message.userId}-${String(index)}`}>
+                @{message.userId.slice(0, 8)}: {message.message}
+              </p>
+            ))}
+          </div>
+        </div>
+      </section>
       {duel.status === 'COMPLETED' && (
         <section className="mt-5 rounded-2xl border border-white/10 bg-white/[.035] p-5">
           <h2 className="font-bold text-white">Final results</h2>

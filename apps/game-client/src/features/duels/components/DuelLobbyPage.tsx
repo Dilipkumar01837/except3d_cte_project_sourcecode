@@ -4,6 +4,7 @@ import { challengeApi, type ChallengeSummary } from '@/features/challenges/lib/c
 import { PlayerPageShell } from '@/shared/components/layout/PlayerPageShell';
 import { duelApi, type Duel } from '../lib/duel-api';
 import { trackEvent } from '@/shared/lib/telemetry';
+import { socialApi } from '@/features/social/lib/social-api';
 
 export function DuelLobbyPage() {
   const [challenges, setChallenges] = useState<ChallengeSummary[]>([]);
@@ -11,6 +12,7 @@ export function DuelLobbyPage() {
   const [challengeId, setChallengeId] = useState('');
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
+  const [matching, setMatching] = useState(false);
   const navigate = useNavigate();
 
   const load = async () => {
@@ -61,6 +63,18 @@ export function DuelLobbyPage() {
     }
   };
 
+  const quickMatch = async () => {
+    if (!challengeId || busy || matching) return;
+    setMatching(true);
+    try {
+      const result = await socialApi.quickMatch(challengeId);
+      if (result.status === 'MATCHED' && result.duelId) void navigate(`/duels/${result.duelId}`);
+    } catch {
+      setError('Unable to join matchmaking.');
+      setMatching(false);
+    }
+  };
+
   return (
     <PlayerPageShell
       eyebrow="Duel lobby"
@@ -96,7 +110,30 @@ export function DuelLobbyPage() {
           >
             Open match
           </button>
+          <button
+            type="button"
+            disabled={busy || matching || !challengeId}
+            onClick={() => {
+              void quickMatch();
+            }}
+            className="rounded-lg border border-emerald-300/40 px-4 py-2 text-sm font-bold text-emerald-200 disabled:opacity-50"
+          >
+            {matching ? 'Finding opponent...' : 'Quick match'}
+          </button>
         </div>
+        {matching && (
+          <button
+            type="button"
+            onClick={() => {
+              void socialApi.cancelMatch().finally(() => {
+                setMatching(false);
+              });
+            }}
+            className="mt-3 text-xs text-slate-400 underline"
+          >
+            Cancel matchmaking
+          </button>
+        )}
       </section>
       <section className="mt-6">
         <div className="mb-3 flex items-center justify-between">

@@ -105,6 +105,12 @@ export function WorldLevelsPage() {
           <span className="font-bold text-cyan-200">{world.reachablePercent}%</span>
         </div>
       </div>
+      <Link
+        to={`/assessments?worldId=${world.id}&type=PRE`}
+        className="mb-6 inline-block rounded-lg border border-violet-300/30 px-4 py-2 text-sm font-bold text-violet-200"
+      >
+        Take world pre-assessment
+      </Link>
 
       {completionPercent === 100 && (
         <div className="mb-6 rounded-2xl border border-amber-300/40 bg-amber-300/[.08] p-6 text-center">

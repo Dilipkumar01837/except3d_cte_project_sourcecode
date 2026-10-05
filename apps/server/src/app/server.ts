@@ -7,6 +7,8 @@ import { verifyAccessToken } from '../shared/lib/jwt.js';
 import { setSocketServer, authenticatedSockets } from '../shared/lib/socket.js';
 import { prisma } from '../shared/lib/prisma.js';
 import { seedLeaderboardIfEmpty } from '../shared/lib/leaderboard.js';
+import { attachDuelRealtime } from '../modules/duels/duel-realtime.js';
+import { attachSocialSocket } from '../modules/social/social.socket.js';
 
 export function createHttpServer() {
   const app = createApp();
@@ -60,6 +62,7 @@ export function createHttpServer() {
         data.userId = userId;
         data.role = user.role;
         authenticatedSockets.set(socket.id, { userId, role: user.role });
+        attachSocialSocket(socket);
 
         socket.emit('connected', { userId });
 
@@ -122,6 +125,7 @@ export function createHttpServer() {
   });
 
   setSocketServer(io);
+  attachDuelRealtime(io);
 
   return { httpServer, io };
 }

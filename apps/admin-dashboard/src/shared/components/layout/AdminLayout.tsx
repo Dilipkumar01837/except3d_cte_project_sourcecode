@@ -9,6 +9,8 @@ const NAV_LINKS = [
   { to: '/worlds', label: 'Worlds', icon: '◆' },
   { to: '/achievements', label: 'Achievements', icon: '◇' },
   { to: '/system', label: 'System', icon: '◎' },
+  { to: '/analytics', label: 'Learning Analytics', icon: '◌' },
+  { to: '/scenes', label: '3D Scenes', icon: '◇' },
 ];
 
 export function AdminLayout() {

@@ -37,6 +37,16 @@ const AchievementsPage = lazy(() =>
 const SystemPage = lazy(() =>
   import('@/features/system/components/SystemPage').then((m) => ({ default: m.SystemPage })),
 );
+const LearningAnalyticsPage = lazy(() =>
+  import('@/features/analytics/components/LearningAnalyticsPage').then((m) => ({
+    default: m.LearningAnalyticsPage,
+  })),
+);
+const SceneManagerPage = lazy(() =>
+  import('@/features/scenes/components/SceneManagerPage').then((m) => ({
+    default: m.SceneManagerPage,
+  })),
+);
 
 function PageFallback() {
   return (
@@ -133,6 +143,22 @@ export function AdminRouter() {
           element={
             <Suspense fallback={<PageFallback />}>
               <SystemPage />
+            </Suspense>
+          }
+        />
+        <Route
+          path="/analytics"
+          element={
+            <Suspense fallback={<PageFallback />}>
+              <LearningAnalyticsPage />
+            </Suspense>
+          }
+        />
+        <Route
+          path="/scenes"
+          element={
+            <Suspense fallback={<PageFallback />}>
+              <SceneManagerPage />
             </Suspense>
           }
         />
