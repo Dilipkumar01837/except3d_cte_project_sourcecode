@@ -84,6 +84,8 @@ model User {
   joinedDuels    DuelMatch[] @relation("DuelOpponent")
   wonDuels       DuelMatch[] @relation("DuelWinner")
   aiHintHistory  AiHintHistory[]
+  learningProfile UserLearningProfile?
+  hintHistory    HintHistory[]
   roomKeys       PlayerRoomKey[]
   telemetryEvents TelemetryEvent[]
   userEvents      UserEvent[]
@@ -256,6 +258,14 @@ enum ChallengeType {
   OUTPUT_PREDICTION
   FILL_IN_THE_BLANK
   CODE_COMPLETION
+}
+
+enum HintType {
+  CONCEPTUAL
+  DIRECTIONAL
+  SPECIFIC
+  EXAMPLE
+  DEBUGGING
 }
 
 enum SubmissionStatus {
@@ -548,6 +558,7 @@ model Challenge {
   gameLevel       GameLevel?
   duels           DuelMatch[]
   aiHintHistory   AiHintHistory[]
+  hintHistory     HintHistory[]
   @@index([isPublished, difficulty])
   @@index([type])
 }
@@ -594,6 +605,48 @@ model AiHintHistory {
 
   @@index([userId, createdAt])
   @@index([challengeId, createdAt])
+}
+
+model UserLearningProfile {
+  id                     String   @id @default(uuid())
+  userId                 String   @unique
+  skillLevels            Json     @default("{}")
+  errorPatterns          Json     @default("{}")
+  preferredLearningStyle String?
+  personalizedHintsOptOut Boolean  @default(false)
+  currentStreak          Int      @default(0)
+  xp                     Int      @default(0)
+  level                  Int      @default(1)
+  recentPerformanceTrend Float?
+  totalRuns              Int      @default(0)
+  successfulRuns         Int      @default(0)
+  updatedAt              DateTime @updatedAt
+  createdAt              DateTime @default(now())
+  user                   User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  hintHistory            HintHistory[]
+  @@index([updatedAt])
+}
+
+model HintHistory {
+  id               String               @id @default(uuid())
+  userId           String
+  challengeId      String
+  language         ProgrammingLanguage
+  hintType         HintType
+  hintText         String
+  contextSnapshot  Json
+  helpfulRating    Boolean?
+  attemptsBefore   Int                  @default(0)
+  attemptsAfter    Int?
+  solvedAfter      Boolean              @default(false)
+  requestedAnother Boolean              @default(false)
+  createdAt        DateTime             @default(now())
+  user             User                 @relation(fields: [userId], references: [id], onDelete: Cascade, map: "HintHistory_user_fkey")
+  challenge        Challenge            @relation(fields: [challengeId], references: [id], onDelete: Cascade)
+  profile          UserLearningProfile  @relation(fields: [userId], references: [userId], onDelete: Cascade, map: "HintHistory_profile_fkey")
+  @@index([userId, createdAt])
+  @@index([challengeId, createdAt])
+  @@index([hintType, helpfulRating])
 }
 
 model ChallengeTestCase {

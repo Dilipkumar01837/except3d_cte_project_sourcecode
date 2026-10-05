@@ -111,6 +111,8 @@ export interface HintQuota {
 export interface AiHintResult extends HintOutcome {
   hint: string;
   hintId: string;
+  hintType: 'CONCEPTUAL' | 'DIRECTIONAL' | 'SPECIFIC' | 'EXAMPLE' | 'DEBUGGING';
+  personalized: boolean;
   quota: HintQuota;
 }
 export interface AiErrorHintResult extends HintOutcome, AiErrorHint {
@@ -173,11 +175,17 @@ export const challengeApi = {
       hint: { content: string; xpPenalty: number; alreadyRevealed: boolean } & HintOutcome;
     }>(await apiClient.get(`/challenges/${encodeURIComponent(slug)}/hints/${String(level)}`)).hint;
   },
-  async aiHint(slug: string, language: Language, sourceCode: string): Promise<AiHintResult> {
+  async aiHint(
+    slug: string,
+    language: Language,
+    sourceCode: string,
+    hintType?: AiHintResult['hintType'],
+  ): Promise<AiHintResult> {
     return dataOf<{ hint: AiHintResult }>(
       await apiClient.post(`/challenges/${encodeURIComponent(slug)}/hints/ai`, {
         language,
         sourceCode,
+        hintType,
       }),
     ).hint;
   },

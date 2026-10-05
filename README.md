@@ -299,6 +299,8 @@ migration is `20261005150000_fcm_tokens`; notification enum values are in
 - **Scoring** — accuracy × speed bonus × retry penalty; hidden test cases never sent to client
 - **AI hints** — optional Groq-powered hints based on the challenge, language, and current student code; authored hints remain available without Groq
 - **Hint metering & feedback** — per-user daily AI-hint quota, and helpful/not-helpful voting on authored and AI hints; hints are marked resolved when the challenge is accepted
+- **Adaptive hints** — each player has a PostgreSQL learning profile containing skill/error summaries and hint context. Hint depth and type are selected from recent performance, prior hints are supplied to Groq to avoid repetition, and a local rule-based hint is returned when Groq is unavailable.
+- **Hint privacy and review** — `/api/v1/hints/preferences` controls personalization, `/api/v1/hints/history` lets players review their hints, and admins can view effectiveness at `/api/v1/admin/hints/analytics`. Only challenge/code context and anonymized learning signals are sent to Groq; no user identity is included.
 - **Beginner content** — 6 problems seeded across all 7 languages (42 challenges) in the starter world
 
 ### Progression
@@ -363,33 +365,48 @@ pnpm test:e2e
 
 Private — graduation project.
 
-## Current Scope
+## Project Scope
 
-The current implementation is a browser-based gamified learning prototype. Escape rooms are
-2D themed scenes, not 3D. It does not include a native React Native application, friends or
-matchmaking, or research measurements proving learning-outcome improvements. Duel matches
-resolve once both players submit an accepted solution, ranked by score then earliest finish;
-telemetry is opt-in and aggregate-only, and is not used as a learning-outcome measure.
+Code to Escape is a web-only, responsive platform. The implemented scope includes
+gamified worlds and escape rooms, real-time duels, adaptive AI hints, 3D scenes with
+2D fallback, social features, Firebase Cloud Messaging notifications, and learning
+measurement and analytics. A mobile application is outside this project.
 
-### Running a submission
+## User Evaluation Study
 
-A submission is a two-process operation, and this is the most common way to get stuck:
+The evaluation protocol asks whether Code to Escape improves motivation, problem-solving
+speed, retention, hint effectiveness, and duel engagement. The planned design is a
+randomized between-subjects comparison of traditional coding exercises and Code to Escape,
+with pre-test, post-test, delayed post-test, motivation surveys, and consent-gated telemetry.
+The target is at least 30 participants per condition; a larger sample is required for a
+well-powered confirmatory study.
 
-1. `POST /challenges/:slug/submissions` enqueues a job in Redis and returns `202`.
-2. The **worker** pops the job, POSTs it to the code runner, and writes the verdict.
+No analyzed participant dataset or verified statistical results are currently checked into
+this repository. Therefore, the synopsis claim remains an evidence-safe design claim rather
+than a demonstrated result. See [`docs/EvaluationStudyProtocol.md`](docs/EvaluationStudyProtocol.md),
+[`docs/StudyResultsTemplate.md`](docs/StudyResultsTemplate.md), and
+[`docs/SynopsisClaim.md`](docs/SynopsisClaim.md).
 
-If the worker is not running, submissions stay `QUEUED` forever and no result is ever
-recorded. This is the expected behaviour, not a bug, and there is no in-process fallback —
-the judge reports a real error rather than inventing a verdict.
+## How to Run
 
-```bash
-# Terminal 1 - dependencies
-docker compose up -d postgres redis code-runner
+1. Install Node.js 20+, pnpm 9+, and Docker.
+2. Run `pnpm install` and copy `.env.example` to `.env`.
+3. Start PostgreSQL and Redis with `docker compose up postgres redis -d`.
+4. Apply migrations with `pnpm db:migrate`.
+5. Start the API, worker, game client, and admin dashboard using the commands in
+   [Quick Start](#quick-start), or run `pnpm dev`.
 
-# Terminal 2 - API
-pnpm --filter @code-to-escape/server dev
+Configure `DATABASE_URL`, `REDIS_URL`, JWT secrets, code-runner settings, and optional
+Groq/Firebase variables in `.env`. The worker must run for submitted code to be judged.
 
-# Terminal 3 - worker (required for submissions to be judged)
-pnpm dev:worker
-# or let Compose run both: docker compose up -d server worker
-```
+## Technology Stack
+
+- React 19, Vite, TypeScript, Tailwind CSS, Framer Motion, Zustand, React Router, Monaco Editor
+- Node.js, Express, Socket.IO, Prisma, PostgreSQL, Redis, Docker
+- React Three Fiber and Three.js for web 3D scenes
+- Groq API for optional adaptive hints and Firebase Cloud Messaging for web notifications
+- Vitest, Supertest, and Playwright for testing
+
+## Contributors
+
+- Dilip Kumar C — project engineering, platform implementation, infrastructure, and documentation

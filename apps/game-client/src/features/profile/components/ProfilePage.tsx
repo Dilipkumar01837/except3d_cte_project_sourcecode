@@ -1,10 +1,11 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { useAuthStore } from '@/features/auth/store/auth.store';
 import { PlayerPageShell } from '@/shared/components/layout/PlayerPageShell';
 import { GlassPanel, PanelHeading, StatTile } from '@/shared/components/ui/player-ui';
 import { Input } from '@/shared/components/ui/Input';
 import { FormButton } from '@/shared/components/ui/FormButton';
+import { apiClient } from '@/shared/lib/api-client';
 
 interface ProfileFormData {
   displayName: string;
@@ -14,6 +15,20 @@ interface ProfileFormData {
 export function ProfilePage() {
   const { user, updateProfile, isLoading, error } = useAuthStore();
   const [saved, setSaved] = useState(false);
+  const [hintHistory, setHintHistory] = useState<
+    Array<{ id: string; hintType: string; hintText: string; helpfulRating: boolean | null }>
+  >([]);
+  const [personalizedHintsOptOut, setPersonalizedHintsOptOut] = useState(false);
+
+  useEffect(() => {
+    void Promise.all([
+      apiClient.get<{ data: { history: typeof hintHistory } }>('/hints/history'),
+      apiClient.get<{ data: { personalizedHintsOptOut: boolean } }>('/hints/preferences'),
+    ]).then(([history, preferences]) => {
+      setHintHistory(history.data.data.history);
+      setPersonalizedHintsOptOut(preferences.data.data.personalizedHintsOptOut);
+    });
+  }, []);
 
   const {
     register,
@@ -128,6 +143,36 @@ export function ProfilePage() {
           />
         </div>
       )}
+      <GlassPanel className="p-6">
+        <PanelHeading
+          title="Adaptive hints"
+          description="Hints use only your learning history and can be disabled at any time."
+        />
+        <label className="flex items-center gap-3 text-sm text-slate-300">
+          <input
+            type="checkbox"
+            checked={!personalizedHintsOptOut}
+            onChange={(event) => {
+              const next = !event.target.checked;
+              setPersonalizedHintsOptOut(next);
+              void apiClient.patch('/hints/preferences', { personalizedHintsOptOut: next });
+            }}
+          />
+          Personalize hints using my progress
+        </label>
+        <div className="mt-5 space-y-3">
+          <h3 className="text-sm font-semibold text-white">Hint history</h3>
+          {hintHistory.map((hint) => (
+            <div key={hint.id} className="rounded-lg border border-white/10 p-3">
+              <p className="text-xs uppercase text-cyan-300">{hint.hintType.toLowerCase()}</p>
+              <p className="mt-1 text-sm text-slate-300">{hint.hintText}</p>
+            </div>
+          ))}
+          {hintHistory.length === 0 && (
+            <p className="text-sm text-slate-500">No adaptive hints yet.</p>
+          )}
+        </div>
+      </GlassPanel>
     </PlayerPageShell>
   );
 }

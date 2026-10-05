@@ -6,7 +6,12 @@ import { sendError, sendSuccess } from '../../shared/lib/response.js';
 import { enqueueSubmission } from './execution.queue.js';
 import { executeWithRunner, JudgeServiceError } from './judge-execution.js';
 import { getHintQuota } from './hint-quota.js';
-import { AiHintUnavailableError, generateAiErrorHint, generateAiHint } from './ai-hint.service.js';
+import {
+  AiHintUnavailableError,
+  generateAiErrorHint,
+  generateAdaptiveHint,
+  type AdaptiveHintType,
+} from './ai-hint.service.js';
 import { resolveChallengeRoom } from '../worlds/challenge-room.service.js';
 
 function playerId(req: Request, res: Response): string | undefined {
@@ -131,7 +136,7 @@ export async function getHint(req: Request, res: Response): Promise<void> {
 export async function getAiHint(req: Request, res: Response): Promise<void> {
   const id = playerId(req, res);
   const slug = stringParam(req, res, 'slug');
-  const body = req.body as { language?: string; sourceCode?: string };
+  const body = req.body as { language?: string; sourceCode?: string; hintType?: AdaptiveHintType };
   if (!id || !slug) return;
   if (
     typeof body.sourceCode !== 'string' ||
@@ -147,7 +152,13 @@ export async function getAiHint(req: Request, res: Response): Promise<void> {
   }
   const challenge = await prisma.challenge.findFirst({
     where: { slug, isPublished: true },
-    select: { id: true, statement: true },
+    select: {
+      id: true,
+      title: true,
+      statement: true,
+      difficulty: true,
+      testCases: { select: { input: true, expectedOutput: true }, orderBy: { sortOrder: 'asc' } },
+    },
   });
   if (!challenge) {
     sendError(res, 404, 'NOT_FOUND', 'Challenge not found');
@@ -167,22 +178,42 @@ export async function getAiHint(req: Request, res: Response): Promise<void> {
     return;
   }
   try {
-    const hint = await generateAiHint({
-      statement: challenge.statement,
+    const profile = await prisma.userLearningProfile.findUnique({
+      where: { userId: id },
+      select: { personalizedHintsOptOut: true },
+    });
+    const adaptive = await generateAdaptiveHint({
+      userId: id,
+      challenge,
       language: body.language,
       sourceCode: body.sourceCode,
+      personalized: profile?.personalizedHintsOptOut !== true,
+      requestedType: body.hintType,
     });
     const record = await prisma.aiHintHistory.create({
       data: {
         userId: id,
         challengeId: challenge.id,
         language: body.language as ProgrammingLanguage,
-        hint,
+        hint: adaptive.hint,
       },
       select: { id: true, resolvedAfter: true, helpful: true },
     });
+    await prisma.hintHistory.create({
+      data: {
+        userId: id,
+        challengeId: challenge.id,
+        language: body.language as ProgrammingLanguage,
+        hintType: adaptive.hintType,
+        hintText: adaptive.hint,
+        contextSnapshot: JSON.parse(JSON.stringify(adaptive.contextSnapshot)) as object,
+        attemptsBefore: adaptive.attemptsBefore,
+      },
+    });
     sendSuccess(res, {
-      hint,
+      hint: adaptive.hint,
+      hintType: adaptive.hintType,
+      personalized: adaptive.personalized,
       hintId: record.id,
       resolvedAfter: record.resolvedAfter,
       helpful: record.helpful,

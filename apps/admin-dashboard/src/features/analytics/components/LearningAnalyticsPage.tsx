@@ -13,6 +13,12 @@ export function LearningAnalyticsPage() {
   const [experimentKey, setExperimentKey] = useState('');
   const [experimentName, setExperimentName] = useState('');
   const [experimentVariants, setExperimentVariants] = useState('control,treatment');
+  const [hintEffectiveness, setHintEffectiveness] = useState<{
+    total: number;
+    rated: number;
+    helpfulRate: number;
+    solveRate: number;
+  }>();
   const load = useCallback(
     () =>
       adminApi
@@ -25,6 +31,10 @@ export function LearningAnalyticsPage() {
   );
   useEffect(() => {
     void load();
+    void adminApi
+      .getHintAnalytics()
+      .then(setHintEffectiveness)
+      .catch(() => undefined);
   }, [load]);
   const exportCsv = async () => {
     const blob = await adminApi.exportLearningAnalytics({ from, to });
@@ -101,6 +111,33 @@ export function LearningAnalyticsPage() {
         </label>
       </div>
       {error && <p className="text-sm text-rose-300">{error}</p>}
+      {hintEffectiveness && (
+        <section className="rounded-xl border border-cyan-400/20 bg-slate-900 p-5">
+          <h2 className="font-semibold text-white">Hint Effectiveness</h2>
+          <div className="mt-4 grid gap-3 sm:grid-cols-4">
+            <div>
+              <p className="text-xs text-slate-500">Hints served</p>
+              <p className="text-2xl font-bold text-cyan-300">{hintEffectiveness.total}</p>
+            </div>
+            <div>
+              <p className="text-xs text-slate-500">Helpful ratings</p>
+              <p className="text-2xl font-bold text-emerald-300">
+                {Math.round(hintEffectiveness.helpfulRate * 100)}%
+              </p>
+            </div>
+            <div>
+              <p className="text-xs text-slate-500">Solved after hint</p>
+              <p className="text-2xl font-bold text-amber-300">
+                {Math.round(hintEffectiveness.solveRate * 100)}%
+              </p>
+            </div>
+            <div>
+              <p className="text-xs text-slate-500">Rated hints</p>
+              <p className="text-2xl font-bold text-white">{hintEffectiveness.rated}</p>
+            </div>
+          </div>
+        </section>
+      )}
       <section className="rounded-xl border border-slate-700/50 bg-slate-900 p-5">
         <h2 className="font-semibold text-white">Average score improvement</h2>
         <div className="mt-5 space-y-4">

@@ -355,12 +355,12 @@ export function ChallengePlayerPage() {
     }
   };
 
-  const requestAiHint = async () => {
+  const requestAiHint = async (hintType?: AiHintResult['hintType']) => {
     if (!slug || !code.trim() || loadingAiHint) return;
     setLoadingAiHint(true);
     setError('');
     try {
-      const result = await challengeApi.aiHint(slug, language, code);
+      const result = await challengeApi.aiHint(slug, language, code, hintType);
       setAiHint(result);
       setAiHintVote(result.helpful);
     } catch {
@@ -996,8 +996,32 @@ export function ChallengePlayerPage() {
               </div>
               {aiHint && (
                 <>
+                  <div className="mt-2 flex flex-wrap items-center gap-2 text-[11px] text-cyan-200">
+                    <span className="rounded border border-cyan-400/30 px-2 py-0.5">
+                      {aiHint.hintType.toLowerCase()}
+                    </span>
+                    {aiHint.personalized && <span>Personalized from your progress</span>}
+                  </div>
                   <p className="mt-2 whitespace-pre-wrap text-sm text-slate-200">{aiHint.hint}</p>
                   <HintFeedback value={aiHintVote} onVote={(helpful) => void voteAiHint(helpful)} />
+                  <div className="mt-2 flex flex-wrap gap-2">
+                    <button
+                      type="button"
+                      onClick={() => void requestAiHint('DIRECTIONAL')}
+                      disabled={loadingAiHint}
+                      className="text-[11px] text-cyan-200 underline disabled:opacity-50"
+                    >
+                      Different hint
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => void requestAiHint('EXAMPLE')}
+                      disabled={loadingAiHint}
+                      className="text-[11px] text-cyan-200 underline disabled:opacity-50"
+                    >
+                      Show an example
+                    </button>
+                  </div>
                   <p className="mt-1 text-[11px] text-slate-400">
                     {aiHint.quota.remaining} of {aiHint.quota.limit} AI hints left
                   </p>

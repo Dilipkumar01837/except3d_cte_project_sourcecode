@@ -65,6 +65,7 @@ import {
   updateAchievementHandler,
   publishAchievementHandler,
   unpublishAchievementHandler,
+  getHintAnalyticsHandler,
 } from './admin.controller.js';
 import { getTelemetrySummaryHandler } from '../telemetry/telemetry.controller.js';
 
@@ -77,6 +78,7 @@ adminRouter.use(authenticate, authorize('ADMIN', 'SUPER_ADMIN'));
 adminRouter.get('/overview', asyncHandler(getOverview));
 adminRouter.get('/system', asyncHandler(getSystemStatusHandler));
 adminRouter.get('/audit', asyncHandler(getAuditLog));
+adminRouter.get('/hints/analytics', asyncHandler(getHintAnalyticsHandler));
 
 // Users
 adminRouter.get('/users', asyncHandler(listUsersHandler));

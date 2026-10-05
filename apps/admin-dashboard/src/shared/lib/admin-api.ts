@@ -131,6 +131,12 @@ export interface LearningAnalytics {
     averageAssessmentTimeMs: number;
   }>;
   experimentVariants: Array<{ variant: string; users: number }>;
+  hintEffectiveness?: {
+    total: number;
+    rated: number;
+    helpfulRate: number;
+    solveRate: number;
+  };
 }
 export interface AdminScene {
   id: string;
@@ -158,24 +164,26 @@ export const adminApi = {
     experimentId?: string;
     variant?: string;
   }) => apiClient.get('/admin/analytics', { params }).then(data<LearningAnalytics>),
+  getHintAnalytics: () =>
+    apiClient
+      .get('/admin/hints/analytics')
+      .then(data<{ total: number; rated: number; helpfulRate: number; solveRate: number }>),
   exportLearningAnalytics: (params: { from?: string; to?: string; eventType?: string }) =>
     apiClient
       .get('/admin/analytics/export', { params, responseType: 'blob' })
       .then((response) => response.data as Blob),
   listExperiments: () =>
-    apiClient
-      .get('/admin/experiments')
-      .then(
-        data<{
-          experiments: Array<{
-            id: string;
-            key: string;
-            name: string;
-            isActive: boolean;
-            variants: string[];
-          }>;
-        }>,
-      ),
+    apiClient.get('/admin/experiments').then(
+      data<{
+        experiments: Array<{
+          id: string;
+          key: string;
+          name: string;
+          isActive: boolean;
+          variants: string[];
+        }>;
+      }>,
+    ),
   createExperiment: (payload: {
     key: string;
     name: string;

@@ -43,6 +43,29 @@ import {
   updateAdminAchievement,
   toggleAchievementPublish,
 } from './admin.service.js';
+
+export async function getHintAnalyticsHandler(_req: Request, res: Response): Promise<void> {
+  const [total, rated, helpful, solved, byType] = await Promise.all([
+    prisma.hintHistory.count(),
+    prisma.hintHistory.count({ where: { helpfulRating: { not: null } } }),
+    prisma.hintHistory.count({ where: { helpfulRating: true } }),
+    prisma.hintHistory.count({ where: { solvedAfter: true } }),
+    prisma.hintHistory.groupBy({
+      by: ['hintType'],
+      _count: { _all: true },
+      _avg: { attemptsBefore: true },
+    }),
+  ]);
+  sendSuccess(res, {
+    total,
+    rated,
+    helpful,
+    helpfulRate: rated ? helpful / rated : 0,
+    solved,
+    solveRate: total ? solved / total : 0,
+    byType,
+  });
+}
 import type {
   CreateChallengeInput,
   UpdateChallengeInput,

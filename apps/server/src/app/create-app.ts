@@ -20,6 +20,7 @@ import { sceneAdminRouter, sceneRouter } from '../modules/scenes/scene.routes.js
 import { socialRouter } from '../modules/social/social.routes.js';
 import { notificationRouter } from '../modules/notifications/notification.routes.js';
 import { learningAdminRouter, learningRouter } from '../modules/learning/learning.routes.js';
+import { hintsRouter } from '../modules/hints/hints.routes.js';
 
 export function createApp(): ReturnType<typeof express> {
   const app = express();
@@ -62,6 +63,7 @@ export function createApp(): ReturnType<typeof express> {
   app.use(`${API_BASE_PATH}/auth`, authRouter);
   app.use(`${API_BASE_PATH}/player`, playerRouter);
   app.use(`${API_BASE_PATH}/challenges`, challengeRouter);
+  app.use(`${API_BASE_PATH}/hints`, hintsRouter);
   app.use(`${API_BASE_PATH}/admin`, adminRouter);
   app.use(`${API_BASE_PATH}/player/daily-reward`, dailyRewardRouter);
   app.use(`${API_BASE_PATH}/duels`, duelRouter);
