@@ -15,13 +15,97 @@ const RANK_STYLES: Record<string, string> = {
   GRANDMASTER: 'border-rose-400/30 bg-rose-400/10 text-rose-200',
 };
 
-const WORLD_LABELS: Record<string, { label: string; code: string }> = {
-  PYTHON_FOREST: { label: 'Python Forest', code: 'PY' },
-  JAVASCRIPT_JUNGLE: { label: 'JavaScript Jungle', code: 'JS' },
-  TYPESCRIPT_TUNDRA: { label: 'TypeScript Tundra', code: 'TS' },
-  RUST_REALM: { label: 'Rust Realm', code: 'RS' },
-  GO_GALAXY: { label: 'Go Galaxy', code: 'GO' },
+interface WorldConfig {
+  label: string;
+  code: string;
+  icon: string;
+  gradient: string;
+  accent: string;
+  accentText: string;
+}
+
+const WORLD_CONFIGS: Record<string, WorldConfig> = {
+  PYTHON_FOREST: {
+    label: 'Python Forest',
+    code: 'PY',
+    icon: '🌿',
+    gradient: 'linear-gradient(135deg, #041a0d 0%, #0a2e18 100%)',
+    accent: '#34d399',
+    accentText: 'text-emerald-300',
+  },
+  JAVASCRIPT_JUNGLE: {
+    label: 'JavaScript Jungle',
+    code: 'JS',
+    icon: '⚡',
+    gradient: 'linear-gradient(135deg, #050010 0%, #190070 100%)',
+    accent: '#a78bfa',
+    accentText: 'text-violet-300',
+  },
+  TYPESCRIPT_TUNDRA: {
+    label: 'TypeScript Tundra',
+    code: 'TS',
+    icon: '❄️',
+    gradient: 'linear-gradient(135deg, #020c1b 0%, #1e3a5f 100%)',
+    accent: '#93c5fd',
+    accentText: 'text-sky-300',
+  },
+  RUST_REALM: {
+    label: 'Rust Realm',
+    code: 'RS',
+    icon: '🔥',
+    gradient: 'linear-gradient(135deg, #0f0402 0%, #7c2d12 100%)',
+    accent: '#fb923c',
+    accentText: 'text-orange-300',
+  },
+  GO_GALAXY: {
+    label: 'Go Galaxy',
+    code: 'GO',
+    icon: '🚀',
+    gradient: 'linear-gradient(135deg, #000208 0%, #0f172a 100%)',
+    accent: '#818cf8',
+    accentText: 'text-indigo-300',
+  },
 };
+
+const DEFAULT_WORLD: WorldConfig = {
+  label: 'Unknown',
+  code: '--',
+  icon: '◈',
+  gradient: 'linear-gradient(135deg, #0f1117 0%, #1c2333 100%)',
+  accent: '#94a3b8',
+  accentText: 'text-slate-300',
+};
+
+const QUICK_ACTIONS = [
+  {
+    to: '/challenges',
+    title: 'Continue coding',
+    desc: 'Pick up where you left off',
+    hoverBorder: 'hover:border-cyan-300/30',
+    hoverBg: 'hover:bg-white/[0.06]',
+  },
+  {
+    to: '/leaderboard',
+    title: 'View leaderboard',
+    desc: 'Compare your escape score',
+    hoverBorder: 'hover:border-amber-300/30',
+    hoverBg: 'hover:bg-white/[0.06]',
+  },
+  {
+    to: '/duels',
+    title: 'Enter duel lobby',
+    desc: 'Compete with another runner',
+    hoverBorder: 'hover:border-violet-300/30',
+    hoverBg: 'hover:bg-white/[0.06]',
+  },
+  {
+    to: '/settings',
+    title: 'Account settings',
+    desc: 'Security and preferences',
+    hoverBorder: 'hover:border-amber-400/50',
+    hoverBg: 'hover:bg-ink-elevated',
+  },
+];
 
 export function DashboardPage() {
   const { user } = useAuthStore();
@@ -33,12 +117,12 @@ export function DashboardPage() {
   const xpProgress = profile ? Math.min(Math.round((profile.xp / xpForNextLevel) * 100), 100) : 0;
   const rank = profile?.rank ?? 'BEGINNER';
   const rankStyle = RANK_STYLES[rank] ?? RANK_STYLES['BEGINNER'] ?? 'border-slate-500/30';
-  const world = WORLD_LABELS[profile?.currentWorld ?? ''] ?? {
+  const world = WORLD_CONFIGS[profile?.currentWorld ?? ''] ?? {
+    ...DEFAULT_WORLD,
     label: profile?.currentWorld ?? 'Unknown',
-    code: '--',
   };
   const displayName = profile?.displayName ?? user.username;
-  const initials = displayName.slice(0, 1).toUpperCase();
+  const initials = displayName.slice(0, 2).toUpperCase();
 
   return (
     <PlayerPageShell
@@ -55,14 +139,19 @@ export function DashboardPage() {
       }
       maxWidth="7xl"
     >
+      {/* ── Row 1: Player card + Current world ── */}
       <motion.div
         initial={{ opacity: 0, y: 12 }}
         animate={{ opacity: 1, y: 0 }}
         className="grid gap-6 lg:grid-cols-[1.4fr_1fr]"
       >
+        {/* Player card */}
         <GlassPanel className="relative overflow-hidden p-6 sm:p-8">
           <div className="relative flex flex-col gap-6 sm:flex-row sm:items-center">
-            <div className="grid h-16 w-16 shrink-0 place-items-center rounded-lg border border-amber-400/40 bg-amber-400 text-xl font-black text-black">
+            <div
+              className="grid h-16 w-16 shrink-0 place-items-center rounded-xl text-xl font-black text-black"
+              style={{ background: world.accent }}
+            >
               {initials}
             </div>
             <div className="min-w-0 flex-1">
@@ -88,8 +177,8 @@ export function DashboardPage() {
                   </div>
                   <div className="h-2.5 overflow-hidden rounded-full bg-slate-950/80 ring-1 ring-white/10">
                     <div
-                      className="h-full rounded-sm bg-amber-400 transition-all duration-700"
-                      style={{ width: `${String(xpProgress)}%` }}
+                      className="h-full rounded-sm transition-all duration-700"
+                      style={{ width: `${String(xpProgress)}%`, background: world.accent }}
                     />
                   </div>
                 </div>
@@ -98,12 +187,27 @@ export function DashboardPage() {
           </div>
         </GlassPanel>
 
-        <GlassPanel className="flex flex-col justify-between p-6">
-          <div>
-            <p className="font-mono text-xs font-bold uppercase tracking-[0.14em] text-amber-400">
+        {/* Current world card — biome-styled */}
+        <div
+          className="relative flex flex-col justify-between overflow-hidden rounded-lg border p-6 transition"
+          style={{ background: world.gradient, borderColor: world.accent + '40' }}
+        >
+          {/* large icon watermark */}
+          <span
+            className="pointer-events-none absolute right-4 top-3 text-6xl opacity-10 select-none"
+            aria-hidden="true"
+          >
+            {world.icon}
+          </span>
+          <div className="relative">
+            <p
+              className={`font-mono text-xs font-bold uppercase tracking-[0.14em] ${world.accentText}`}
+            >
               Current world
             </p>
-            <p className="mt-3 font-mono text-3xl text-amber-400">{world.code}</p>
+            <p className="mt-3 font-mono text-4xl" style={{ color: world.accent }}>
+              {world.code}
+            </p>
             <p className="mt-2 text-xl font-bold text-white">{world.label}</p>
             <p className="mt-2 text-sm text-slate-400">
               Your active storyline and recommended missions live here.
@@ -111,13 +215,15 @@ export function DashboardPage() {
           </div>
           <Link
             to="/worlds"
-            className="mt-6 inline-flex items-center gap-2 text-sm font-bold text-cyan-200 transition hover:text-cyan-100"
+            className="relative mt-6 inline-flex items-center gap-2 text-sm font-bold transition hover:opacity-80"
+            style={{ color: world.accent }}
           >
             Browse worlds <span aria-hidden="true">→</span>
           </Link>
-        </GlassPanel>
+        </div>
       </motion.div>
 
+      {/* ── Row 2: Stat tiles ── */}
       {profile && (
         <motion.div
           initial={{ opacity: 0, y: 12 }}
@@ -142,6 +248,7 @@ export function DashboardPage() {
         </motion.div>
       )}
 
+      {/* ── Row 3: Daily reward + Quick actions ── */}
       <div className="grid gap-6 lg:grid-cols-[1fr_1fr]">
         <DailyRewardWidget />
         <GlassPanel>
@@ -149,38 +256,21 @@ export function DashboardPage() {
             Quick actions
           </p>
           <div className="mt-4 grid gap-3 sm:grid-cols-2">
-            <Link
-              to="/challenges"
-              className="rounded-xl border border-white/10 bg-white/[0.03] p-4 transition hover:border-cyan-300/30 hover:bg-white/[0.06]"
-            >
-              <p className="font-bold text-white">Continue coding</p>
-              <p className="mt-1 text-xs text-slate-400">Pick up where you left off</p>
-            </Link>
-            <Link
-              to="/leaderboard"
-              className="rounded-xl border border-white/10 bg-white/[0.03] p-4 transition hover:border-amber-300/30 hover:bg-white/[0.06]"
-            >
-              <p className="font-bold text-white">View leaderboard</p>
-              <p className="mt-1 text-xs text-slate-400">Compare your escape score</p>
-            </Link>
-            <Link
-              to="/duels"
-              className="rounded-xl border border-white/10 bg-white/[0.03] p-4 transition hover:border-cyan-300/30 hover:bg-white/[0.06]"
-            >
-              <p className="font-bold text-white">Enter duel lobby</p>
-              <p className="mt-1 text-xs text-slate-400">Compete with another runner</p>
-            </Link>
-            <Link
-              to="/settings"
-              className="rounded-lg border border-ink-border bg-ink-surface p-4 transition hover:border-amber-400/50 hover:bg-ink-elevated"
-            >
-              <p className="font-bold text-white">Account settings</p>
-              <p className="mt-1 text-xs text-slate-400">Security and preferences</p>
-            </Link>
+            {QUICK_ACTIONS.map((action) => (
+              <Link
+                key={action.to}
+                to={action.to}
+                className={`rounded-xl border border-white/10 bg-white/[0.03] p-4 transition ${action.hoverBorder} ${action.hoverBg}`}
+              >
+                <p className="font-bold text-white">{action.title}</p>
+                <p className="mt-1 text-xs text-slate-400">{action.desc}</p>
+              </Link>
+            ))}
           </div>
         </GlassPanel>
       </div>
 
+      {/* ── Row 4: Account snapshot ── */}
       <GlassPanel>
         <p className="text-xs font-bold uppercase tracking-[0.18em] text-slate-500">
           Account snapshot
