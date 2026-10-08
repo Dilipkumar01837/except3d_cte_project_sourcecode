@@ -1,11 +1,20 @@
 import { Canvas, useFrame } from '@react-three/fiber';
 import { Html, OrbitControls, Sparkles, Float, Stars } from '@react-three/drei';
-import { useEffect, useRef, useState, useMemo } from 'react';
+import { useCallback, useEffect, useRef, useState, useMemo } from 'react';
 import * as THREE from 'three';
 import type { WorldLevel } from '@/features/worlds/lib/world-api';
 import { sceneApi, type SceneState } from '../lib/scene-api';
 
-// ─── Shared animated components ────────────────────────────────────────────
+// ─── Types ────────────────────────────────────────────────────────────────────
+
+type NearbyObj = 'terminal' | 'clue' | 'door' | null;
+
+interface InteractPoint {
+  kind: NearbyObj;
+  pos: THREE.Vector3;
+}
+
+// ─── Shared animated components ───────────────────────────────────────────────
 
 function PulsingLight({
   position,
@@ -28,24 +37,23 @@ function PulsingLight({
   return <pointLight ref={ref} position={position} color={color} distance={12} />;
 }
 
+/** Octahedron crystal that bobs and spins — used as the terminal marker. */
 function FloatingCrystal({
   position,
   color,
-  onClick,
 }: {
   position: [number, number, number];
   color: string;
-  onClick: () => void;
 }) {
   const ref = useRef<THREE.Mesh>(null);
   useFrame(({ clock }) => {
     if (ref.current) {
       ref.current.position.y = position[1] + Math.sin(clock.elapsedTime * 1.2) * 0.18;
-      ref.current.rotation.y = clock.elapsedTime * 0.6;
+      ref.current.rotation.y = clock.elapsedTime * 0.8;
     }
   });
   return (
-    <mesh ref={ref} position={position} castShadow onClick={onClick}>
+    <mesh ref={ref} position={position} castShadow>
       <octahedronGeometry args={[0.45, 0]} />
       <meshStandardMaterial
         color={color}
@@ -58,6 +66,7 @@ function FloatingCrystal({
   );
 }
 
+/** Spinning torus gear decoration. */
 function RotatingGear({ position, color }: { position: [number, number, number]; color: string }) {
   const ref = useRef<THREE.Mesh>(null);
   useFrame(({ clock }) => {
@@ -77,16 +86,137 @@ function RotatingGear({ position, color }: { position: [number, number, number];
   );
 }
 
-// ─── Chamber 1: Python Forest (emerald jungle, bioluminescent) ──────────────
+/**
+ * Visible player capsule.  Moves with WASD in 3D space, stays within the room
+ * bounds, and reports its current world-space position every frame so the
+ * parent can run proximity checks.
+ */
+function PlayerCapsule({
+  color,
+  onPositionChange,
+}: {
+  color: string;
+  onPositionChange: (pos: THREE.Vector3) => void;
+}) {
+  const meshRef = useRef<THREE.Mesh>(null);
+  const glowRef = useRef<THREE.PointLight>(null);
+  const keys = useRef(new Set<string>());
+  const pos = useRef(new THREE.Vector3(0, 0.9, 3.5));
+
+  useEffect(() => {
+    const down = (e: KeyboardEvent) => keys.current.add(e.key.toLowerCase());
+    const up = (e: KeyboardEvent) => keys.current.delete(e.key.toLowerCase());
+    window.addEventListener('keydown', down);
+    window.addEventListener('keyup', up);
+    return () => {
+      window.removeEventListener('keydown', down);
+      window.removeEventListener('keyup', up);
+    };
+  }, []);
+
+  useFrame(({ clock }, delta) => {
+    const clampedDelta = Math.min(delta, 0.05);
+    const speed = 4.5;
+    const dx =
+      (Number(keys.current.has('d')) - Number(keys.current.has('a'))) * speed * clampedDelta;
+    const dz =
+      (Number(keys.current.has('s')) - Number(keys.current.has('w'))) * speed * clampedDelta;
+
+    if (dx !== 0 || dz !== 0) {
+      pos.current.x = THREE.MathUtils.clamp(pos.current.x + dx, -7.5, 7.5);
+      pos.current.z = THREE.MathUtils.clamp(pos.current.z + dz, -6.5, 5.5);
+
+      if (meshRef.current) {
+        meshRef.current.position.copy(pos.current);
+        // slight lean in direction of travel
+        meshRef.current.rotation.z = -dx * 4;
+        meshRef.current.rotation.x = -dz * 3;
+      }
+      onPositionChange(pos.current.clone());
+    }
+
+    // bob the player gently when still
+    if (meshRef.current) {
+      meshRef.current.position.y = pos.current.y + Math.sin(clock.elapsedTime * 2) * 0.06;
+    }
+    if (glowRef.current) {
+      glowRef.current.position.copy(pos.current);
+    }
+  });
+
+  return (
+    <group>
+      {/* Body */}
+      <mesh ref={meshRef} position={pos.current.toArray()} castShadow>
+        <capsuleGeometry args={[0.22, 0.55, 6, 12]} />
+        <meshStandardMaterial
+          color={color}
+          emissive={color}
+          emissiveIntensity={0.9}
+          roughness={0.3}
+          metalness={0.4}
+        />
+      </mesh>
+      {/* Subtle player glow */}
+      <pointLight
+        ref={glowRef}
+        position={pos.current.toArray()}
+        color={color}
+        intensity={2.5}
+        distance={3}
+      />
+    </group>
+  );
+}
+
+/** "Press E" prompt that floats above the nearest interactable in world-space. */
+function ProximityLabel({
+  position,
+  label,
+  color,
+}: {
+  position: [number, number, number];
+  label: string;
+  color: string;
+}) {
+  return (
+    <Html position={[position[0], position[1] + 1.1, position[2]]} center distanceFactor={8}>
+      <div
+        style={{ borderColor: color + '88', color }}
+        className="whitespace-nowrap rounded-full border bg-black/80 px-3 py-1 text-[11px] font-black uppercase tracking-widest backdrop-blur"
+      >
+        <kbd className="mr-1 rounded border border-current px-1 py-0.5 text-[10px] opacity-80">
+          E
+        </kbd>
+        {label}
+      </div>
+    </Html>
+  );
+}
+
+// ─── Chamber 1: Python Forest ─────────────────────────────────────────────────
+
 function ForestChamber({
   completed,
-  onTerminal,
-  onDoor,
+  playerPos,
+  nearby,
 }: {
   completed: boolean;
-  onTerminal: () => void;
-  onDoor: () => void;
+  playerPos: THREE.Vector3;
+  nearby: NearbyObj;
 }) {
+  const TERMINAL_POS: [number, number, number] = [0, 1.5, -2.5];
+  const CLUE_POS: [number, number, number] = [-3.5, 0.6, 0.5];
+  const DOOR_POS: [number, number, number] = [0, 1.8, -7.4];
+
+  // door swing when completed
+  const doorRef = useRef<THREE.Mesh>(null);
+  useFrame(() => {
+    if (!doorRef.current) return;
+    const target = completed ? Math.PI / 2.2 : 0;
+    doorRef.current.rotation.y = THREE.MathUtils.lerp(doorRef.current.rotation.y, target, 0.04);
+  });
+
   return (
     <>
       <color attach="background" args={['#030f09']} />
@@ -101,12 +231,13 @@ function ForestChamber({
       />
       <PulsingLight position={[0, 3, -3]} color="#00ff88" baseIntensity={6} />
       <PulsingLight position={[-4, 1.5, 1]} color="#00cc66" baseIntensity={3} speed={2.1} />
-      {/* Floor — mossy stone */}
+
+      {/* Floor */}
       <mesh rotation={[-Math.PI / 2, 0, 0]} receiveShadow>
         <planeGeometry args={[22, 18]} />
         <meshStandardMaterial color="#0a2e1a" roughness={0.98} />
       </mesh>
-      {/* Back wall with vines */}
+      {/* Back wall */}
       <mesh position={[0, 2.5, -8]} receiveShadow>
         <boxGeometry args={[22, 5, 0.3]} />
         <meshStandardMaterial color="#0d2b1f" roughness={0.9} />
@@ -132,7 +263,7 @@ function ForestChamber({
           <meshStandardMaterial color="#1a3d28" roughness={0.9} />
         </mesh>
       ))}
-      {/* Glowing mushrooms as ambient decorations */}
+      {/* Glowing mushrooms */}
       {(
         [
           [-3, 0, 2],
@@ -148,15 +279,31 @@ function ForestChamber({
           </mesh>
         </Float>
       ))}
-      {/* Terminal */}
-      <FloatingCrystal position={[0, 1.5, -2.5]} color="#00ffa0" onClick={onTerminal} />
-      <Html position={[0, 2.5, -2.5]} center>
-        <span className="rounded bg-emerald-950/90 border border-emerald-400/40 px-2 py-1 text-xs font-bold text-emerald-300 shadow-lg">
-          TERMINAL
-        </span>
-      </Html>
-      {/* Gate */}
-      <mesh position={[0, 1.8, -7.5]} castShadow onClick={onDoor}>
+
+      {/* Clue: mossy stone */}
+      <Float speed={0.8} floatIntensity={0.2}>
+        <mesh position={CLUE_POS} castShadow>
+          <boxGeometry args={[0.6, 0.3, 0.6]} />
+          <meshStandardMaterial
+            color="#2d6a4f"
+            emissive="#1b4332"
+            emissiveIntensity={0.6}
+            roughness={0.8}
+          />
+        </mesh>
+      </Float>
+      {nearby === 'clue' && (
+        <ProximityLabel position={CLUE_POS} label="Read clue" color="#86efac" />
+      )}
+
+      {/* Terminal crystal */}
+      <FloatingCrystal position={TERMINAL_POS} color="#00ffa0" />
+      {nearby === 'terminal' && (
+        <ProximityLabel position={TERMINAL_POS} label="Terminal" color="#00ffa0" />
+      )}
+
+      {/* Door */}
+      <mesh ref={doorRef} position={DOOR_POS} castShadow>
         <boxGeometry args={[3.2, 3.6, 0.25]} />
         <meshStandardMaterial
           color={completed ? '#34d399' : '#6b4226'}
@@ -172,6 +319,14 @@ function ForestChamber({
           {completed ? '✓ GATE OPEN' : '⚿ SEALED GATE'}
         </span>
       </Html>
+      {nearby === 'door' && (
+        <ProximityLabel
+          position={DOOR_POS}
+          label={completed ? 'Escape' : 'Try gate'}
+          color="#86efac"
+        />
+      )}
+
       <Sparkles
         count={120}
         scale={[18, 6, 14]}
@@ -193,16 +348,28 @@ function ForestChamber({
   );
 }
 
-// ─── Chamber 2: JavaScript Jungle (neon cyan + purple holographic lab) ──────
+// ─── Chamber 2: JavaScript Jungle (cyber lab) ─────────────────────────────────
+
 function CyberLabChamber({
   completed,
-  onTerminal,
-  onDoor,
+  playerPos,
+  nearby,
 }: {
   completed: boolean;
-  onTerminal: () => void;
-  onDoor: () => void;
+  playerPos: THREE.Vector3;
+  nearby: NearbyObj;
 }) {
+  const TERMINAL_POS: [number, number, number] = [0, 1.4, -2.5];
+  const CLUE_POS: [number, number, number] = [3.5, 0.8, 1];
+  const DOOR_POS: [number, number, number] = [0, 1.8, -7.4];
+
+  const doorRef = useRef<THREE.Mesh>(null);
+  useFrame(() => {
+    if (!doorRef.current) return;
+    const target = completed ? Math.PI / 2.2 : 0;
+    doorRef.current.rotation.y = THREE.MathUtils.lerp(doorRef.current.rotation.y, target, 0.04);
+  });
+
   return (
     <>
       <color attach="background" args={['#050010']} />
@@ -217,12 +384,11 @@ function CyberLabChamber({
       />
       <PulsingLight position={[0, 2.5, -3]} color="#7c3aed" baseIntensity={8} />
       <PulsingLight position={[4, 1, 2]} color="#06b6d4" baseIntensity={4} speed={1.8} />
-      {/* Metallic floor with grid lines */}
+
       <mesh rotation={[-Math.PI / 2, 0, 0]} receiveShadow>
         <planeGeometry args={[22, 18]} />
         <meshStandardMaterial color="#0a0218" roughness={0.3} metalness={0.7} />
       </mesh>
-      {/* Walls */}
       <mesh position={[0, 2.5, -8]} receiveShadow>
         <boxGeometry args={[22, 5, 0.3]} />
         <meshStandardMaterial color="#0d0530" metalness={0.5} roughness={0.4} />
@@ -255,12 +421,29 @@ function CyberLabChamber({
           />
         </mesh>
       ))}
-      {/* Rotating gears */}
       <RotatingGear position={[-3, 2, -5]} color="#06b6d4" />
       <RotatingGear position={[3, 1.5, -4.5]} color="#a855f7" />
-      {/* Terminal — floating console */}
+
+      {/* Clue: data pad */}
+      <Float speed={1.2} floatIntensity={0.25}>
+        <mesh position={CLUE_POS} castShadow>
+          <boxGeometry args={[0.5, 0.7, 0.06]} />
+          <meshStandardMaterial
+            color="#4f46e5"
+            emissive="#6d28d9"
+            emissiveIntensity={1.5}
+            metalness={0.8}
+            roughness={0.1}
+          />
+        </mesh>
+      </Float>
+      {nearby === 'clue' && (
+        <ProximityLabel position={CLUE_POS} label="Read data pad" color="#a78bfa" />
+      )}
+
+      {/* Terminal: floating console */}
       <Float speed={2} rotationIntensity={0.15} floatIntensity={0.4}>
-        <mesh position={[0, 1.4, -2.5]} castShadow onClick={onTerminal}>
+        <mesh position={TERMINAL_POS} castShadow>
           <boxGeometry args={[1.6, 1.0, 0.15]} />
           <meshStandardMaterial
             color="#0891b2"
@@ -271,13 +454,11 @@ function CyberLabChamber({
           />
         </mesh>
       </Float>
-      <Html position={[0, 2.2, -2.5]} center>
-        <span className="rounded bg-cyan-950/90 border border-cyan-400/50 px-2 py-1 text-xs font-bold text-cyan-300 shadow-lg">
-          CONSOLE
-        </span>
-      </Html>
-      {/* Gate */}
-      <mesh position={[0, 1.8, -7.5]} castShadow onClick={onDoor}>
+      {nearby === 'terminal' && (
+        <ProximityLabel position={TERMINAL_POS} label="Console" color="#22d3ee" />
+      )}
+
+      <mesh ref={doorRef} position={DOOR_POS} castShadow>
         <boxGeometry args={[3.2, 3.6, 0.2]} />
         <meshStandardMaterial
           color={completed ? '#06b6d4' : '#3b0764'}
@@ -293,6 +474,14 @@ function CyberLabChamber({
           {completed ? '✓ PORTAL OPEN' : '⚿ PORTAL LOCKED'}
         </span>
       </Html>
+      {nearby === 'door' && (
+        <ProximityLabel
+          position={DOOR_POS}
+          label={completed ? 'Escape' : 'Try portal'}
+          color="#a78bfa"
+        />
+      )}
+
       <Sparkles
         count={100}
         scale={[18, 6, 14]}
@@ -313,16 +502,28 @@ function CyberLabChamber({
   );
 }
 
-// ─── Chamber 3: TypeScript Tundra (icy blue, frozen ruins) ──────────────────
+// ─── Chamber 3: TypeScript Tundra ────────────────────────────────────────────
+
 function IceCaveChamber({
   completed,
-  onTerminal,
-  onDoor,
+  playerPos,
+  nearby,
 }: {
   completed: boolean;
-  onTerminal: () => void;
-  onDoor: () => void;
+  playerPos: THREE.Vector3;
+  nearby: NearbyObj;
 }) {
+  const TERMINAL_POS: [number, number, number] = [0, 1.5, -2.5];
+  const CLUE_POS: [number, number, number] = [-4, 0.8, 1];
+  const DOOR_POS: [number, number, number] = [0, 1.8, -7.4];
+
+  const doorRef = useRef<THREE.Mesh>(null);
+  useFrame(() => {
+    if (!doorRef.current) return;
+    const target = completed ? Math.PI / 2.2 : 0;
+    doorRef.current.rotation.y = THREE.MathUtils.lerp(doorRef.current.rotation.y, target, 0.04);
+  });
+
   return (
     <>
       <color attach="background" args={['#020c1b']} />
@@ -337,12 +538,11 @@ function IceCaveChamber({
       />
       <PulsingLight position={[-2, 3, -3]} color="#38bdf8" baseIntensity={7} speed={0.8} />
       <PulsingLight position={[3, 2, 0]} color="#0ea5e9" baseIntensity={4} speed={1.3} />
-      {/* Icy floor */}
+
       <mesh rotation={[-Math.PI / 2, 0, 0]} receiveShadow>
         <planeGeometry args={[22, 18]} />
         <meshStandardMaterial color="#0c1a2e" roughness={0.1} metalness={0.6} />
       </mesh>
-      {/* Walls */}
       <mesh position={[0, 2.5, -8]} receiveShadow>
         <boxGeometry args={[22, 5, 0.3]} />
         <meshStandardMaterial color="#0f2440" roughness={0.2} metalness={0.5} />
@@ -376,15 +576,33 @@ function IceCaveChamber({
           />
         </mesh>
       ))}
-      {/* Terminal — frozen crystal terminal */}
-      <FloatingCrystal position={[0, 1.5, -2.5]} color="#38bdf8" onClick={onTerminal} />
-      <Html position={[0, 2.5, -2.5]} center>
-        <span className="rounded bg-sky-950/90 border border-sky-400/50 px-2 py-1 text-xs font-bold text-sky-200 shadow-lg">
-          RUNE STONE
-        </span>
-      </Html>
-      {/* Gate */}
-      <mesh position={[0, 1.8, -7.5]} castShadow onClick={onDoor}>
+
+      {/* Clue: ice tablet */}
+      <Float speed={0.7} floatIntensity={0.2}>
+        <mesh position={CLUE_POS} castShadow>
+          <boxGeometry args={[0.55, 0.7, 0.08]} />
+          <meshStandardMaterial
+            color="#7dd3fc"
+            emissive="#0ea5e9"
+            emissiveIntensity={1.2}
+            roughness={0.05}
+            metalness={0.5}
+            transparent
+            opacity={0.9}
+          />
+        </mesh>
+      </Float>
+      {nearby === 'clue' && (
+        <ProximityLabel position={CLUE_POS} label="Read tablet" color="#93c5fd" />
+      )}
+
+      {/* Terminal crystal */}
+      <FloatingCrystal position={TERMINAL_POS} color="#38bdf8" />
+      {nearby === 'terminal' && (
+        <ProximityLabel position={TERMINAL_POS} label="Rune stone" color="#38bdf8" />
+      )}
+
+      <mesh ref={doorRef} position={DOOR_POS} castShadow>
         <boxGeometry args={[3.2, 3.6, 0.22]} />
         <meshStandardMaterial
           color={completed ? '#7dd3fc' : '#1e3a5f'}
@@ -403,6 +621,14 @@ function IceCaveChamber({
           {completed ? '✓ PASSAGE OPEN' : '⚿ FROZEN GATE'}
         </span>
       </Html>
+      {nearby === 'door' && (
+        <ProximityLabel
+          position={DOOR_POS}
+          label={completed ? 'Escape' : 'Try passage'}
+          color="#93c5fd"
+        />
+      )}
+
       <Sparkles
         count={60}
         scale={[18, 6, 14]}
@@ -424,16 +650,28 @@ function IceCaveChamber({
   );
 }
 
-// ─── Chamber 4: Rust Realm (industrial lava forge) ──────────────────────────
+// ─── Chamber 4: Rust Realm (lava forge) ──────────────────────────────────────
+
 function LavaChamber({
   completed,
-  onTerminal,
-  onDoor,
+  playerPos,
+  nearby,
 }: {
   completed: boolean;
-  onTerminal: () => void;
-  onDoor: () => void;
+  playerPos: THREE.Vector3;
+  nearby: NearbyObj;
 }) {
+  const TERMINAL_POS: [number, number, number] = [0, 1.2, -2.5];
+  const CLUE_POS: [number, number, number] = [3, 0.6, 1];
+  const DOOR_POS: [number, number, number] = [0, 1.8, -7.4];
+
+  const doorRef = useRef<THREE.Mesh>(null);
+  useFrame(() => {
+    if (!doorRef.current) return;
+    const target = completed ? Math.PI / 2.2 : 0;
+    doorRef.current.rotation.y = THREE.MathUtils.lerp(doorRef.current.rotation.y, target, 0.04);
+  });
+
   return (
     <>
       <color attach="background" args={['#120302']} />
@@ -448,12 +686,12 @@ function LavaChamber({
       />
       <PulsingLight position={[0, 0.5, -2]} color="#ff4400" baseIntensity={10} speed={2.5} />
       <PulsingLight position={[-3, 1, 1]} color="#ff6600" baseIntensity={5} speed={1.7} />
-      {/* Dark stone floor */}
+
       <mesh rotation={[-Math.PI / 2, 0, 0]} receiveShadow>
         <planeGeometry args={[22, 18]} />
         <meshStandardMaterial color="#1c0803" roughness={0.95} />
       </mesh>
-      {/* Lava cracks in floor */}
+      {/* Lava cracks */}
       {(
         [
           [-2, 0, -1],
@@ -467,7 +705,6 @@ function LavaChamber({
           <meshStandardMaterial color="#ff4400" emissive="#ff2200" emissiveIntensity={3} />
         </mesh>
       ))}
-      {/* Walls */}
       <mesh position={[0, 2.5, -8]} receiveShadow>
         <boxGeometry args={[22, 5, 0.3]} />
         <meshStandardMaterial color="#2a0c04" roughness={0.95} />
@@ -497,8 +734,26 @@ function LavaChamber({
       ))}
       <RotatingGear position={[-5, 3.5, -4]} color="#f97316" />
       <RotatingGear position={[5, 3.5, -4]} color="#dc2626" />
-      {/* Terminal */}
-      <mesh position={[0, 1.2, -2.5]} castShadow onClick={onTerminal}>
+
+      {/* Clue: ownership rune */}
+      <Float speed={0.9} floatIntensity={0.2}>
+        <mesh position={CLUE_POS} castShadow>
+          <tetrahedronGeometry args={[0.4, 0]} />
+          <meshStandardMaterial
+            color="#f97316"
+            emissive="#ea580c"
+            emissiveIntensity={1.8}
+            roughness={0.3}
+            metalness={0.7}
+          />
+        </mesh>
+      </Float>
+      {nearby === 'clue' && (
+        <ProximityLabel position={CLUE_POS} label="Read rune" color="#fb923c" />
+      )}
+
+      {/* Terminal: forge console */}
+      <mesh position={TERMINAL_POS} castShadow>
         <boxGeometry args={[1.4, 0.9, 0.5]} />
         <meshStandardMaterial
           color="#7c2d12"
@@ -508,13 +763,11 @@ function LavaChamber({
           roughness={0.3}
         />
       </mesh>
-      <Html position={[0, 2.2, -2.5]} center>
-        <span className="rounded bg-orange-950/90 border border-orange-400/50 px-2 py-1 text-xs font-bold text-orange-300 shadow-lg">
-          FORGE TERMINAL
-        </span>
-      </Html>
-      {/* Gate */}
-      <mesh position={[0, 1.8, -7.5]} castShadow onClick={onDoor}>
+      {nearby === 'terminal' && (
+        <ProximityLabel position={TERMINAL_POS} label="Forge terminal" color="#fb923c" />
+      )}
+
+      <mesh ref={doorRef} position={DOOR_POS} castShadow>
         <boxGeometry args={[3.2, 3.6, 0.3]} />
         <meshStandardMaterial
           color={completed ? '#fb923c' : '#450a03'}
@@ -531,6 +784,14 @@ function LavaChamber({
           {completed ? '✓ FORGE GATE OPEN' : '⚿ IRON GATE'}
         </span>
       </Html>
+      {nearby === 'door' && (
+        <ProximityLabel
+          position={DOOR_POS}
+          label={completed ? 'Escape' : 'Try gate'}
+          color="#fb923c"
+        />
+      )}
+
       <Sparkles
         count={80}
         scale={[18, 4, 14]}
@@ -551,16 +812,28 @@ function LavaChamber({
   );
 }
 
-// ─── Chamber 5: Go Galaxy (deep space station) ──────────────────────────────
+// ─── Chamber 5: Go Galaxy ─────────────────────────────────────────────────────
+
 function SpaceChamber({
   completed,
-  onTerminal,
-  onDoor,
+  playerPos,
+  nearby,
 }: {
   completed: boolean;
-  onTerminal: () => void;
-  onDoor: () => void;
+  playerPos: THREE.Vector3;
+  nearby: NearbyObj;
 }) {
+  const TERMINAL_POS: [number, number, number] = [0, 1.5, -2.5];
+  const CLUE_POS: [number, number, number] = [-3.5, 1, 1];
+  const DOOR_POS: [number, number, number] = [0, 1.8, -7.4];
+
+  const doorRef = useRef<THREE.Mesh>(null);
+  useFrame(() => {
+    if (!doorRef.current) return;
+    const target = completed ? Math.PI / 2.2 : 0;
+    doorRef.current.rotation.y = THREE.MathUtils.lerp(doorRef.current.rotation.y, target, 0.04);
+  });
+
   return (
     <>
       <color attach="background" args={['#000208']} />
@@ -574,12 +847,12 @@ function SpaceChamber({
       />
       <PulsingLight position={[0, 3, -2]} color="#818cf8" baseIntensity={9} speed={1.1} />
       <PulsingLight position={[-4, 2, 0]} color="#34d399" baseIntensity={3} speed={0.7} />
-      {/* Space station floor — dark metal grating */}
+
       <mesh rotation={[-Math.PI / 2, 0, 0]} receiveShadow>
         <planeGeometry args={[22, 18]} />
         <meshStandardMaterial color="#060d1f" roughness={0.4} metalness={0.8} />
       </mesh>
-      {/* Glowing floor grid lines */}
+      {/* Floor grid */}
       {[-6, -3, 0, 3, 6].map((x) => (
         <mesh key={x} rotation={[-Math.PI / 2, 0, 0]} position={[x, 0.01, 0]}>
           <planeGeometry args={[0.05, 18]} />
@@ -592,7 +865,6 @@ function SpaceChamber({
           <meshStandardMaterial color="#1d4ed8" emissive="#1d4ed8" emissiveIntensity={1.5} />
         </mesh>
       ))}
-      {/* Walls */}
       <mesh position={[0, 2.5, -8]} receiveShadow>
         <boxGeometry args={[22, 5, 0.3]} />
         <meshStandardMaterial color="#0a1628" metalness={0.8} roughness={0.3} />
@@ -603,7 +875,7 @@ function SpaceChamber({
           <meshStandardMaterial color="#0a1628" metalness={0.8} roughness={0.3} />
         </mesh>
       ))}
-      {/* Floating space debris / asteroids */}
+      {/* Floating asteroids */}
       {(
         [
           [-3, 2.5, -4],
@@ -619,9 +891,27 @@ function SpaceChamber({
           </mesh>
         </Float>
       ))}
-      {/* Terminal — holographic panel */}
+
+      {/* Clue: signal array */}
+      <Float speed={1} floatIntensity={0.3}>
+        <mesh position={CLUE_POS} castShadow>
+          <octahedronGeometry args={[0.35, 0]} />
+          <meshStandardMaterial
+            color="#34d399"
+            emissive="#059669"
+            emissiveIntensity={2}
+            metalness={0.6}
+            roughness={0.1}
+          />
+        </mesh>
+      </Float>
+      {nearby === 'clue' && (
+        <ProximityLabel position={CLUE_POS} label="Signal array" color="#34d399" />
+      )}
+
+      {/* Terminal: holographic panel */}
       <Float speed={1.5} rotationIntensity={0.08} floatIntensity={0.3}>
-        <mesh position={[0, 1.5, -2.5]} castShadow onClick={onTerminal}>
+        <mesh position={TERMINAL_POS} castShadow>
           <boxGeometry args={[1.8, 1.1, 0.06]} />
           <meshStandardMaterial
             color="#1e40af"
@@ -634,13 +924,11 @@ function SpaceChamber({
           />
         </mesh>
       </Float>
-      <Html position={[0, 2.4, -2.5]} center>
-        <span className="rounded bg-blue-950/90 border border-blue-400/50 px-2 py-1 text-xs font-bold text-blue-200 shadow-lg">
-          NAV COMPUTER
-        </span>
-      </Html>
-      {/* Gate */}
-      <mesh position={[0, 1.8, -7.5]} castShadow onClick={onDoor}>
+      {nearby === 'terminal' && (
+        <ProximityLabel position={TERMINAL_POS} label="Nav computer" color="#818cf8" />
+      )}
+
+      <mesh ref={doorRef} position={DOOR_POS} castShadow>
         <boxGeometry args={[3.2, 3.6, 0.18]} />
         <meshStandardMaterial
           color={completed ? '#818cf8' : '#1e1b4b'}
@@ -659,6 +947,14 @@ function SpaceChamber({
           {completed ? '✓ AIRLOCK OPEN' : '⚿ AIRLOCK SEALED'}
         </span>
       </Html>
+      {nearby === 'door' && (
+        <ProximityLabel
+          position={DOOR_POS}
+          label={completed ? 'Escape' : 'Try airlock'}
+          color="#818cf8"
+        />
+      )}
+
       <Sparkles
         count={200}
         scale={[20, 8, 16]}
@@ -680,128 +976,150 @@ function SpaceChamber({
   );
 }
 
-// ─── World slug → chamber mapping ──────────────────────────────────────────
-function selectChamber(worldSlug: string) {
-  if (worldSlug.includes('javascript') || worldSlug.includes('js')) return 'cyber';
-  if (worldSlug.includes('typescript') || worldSlug.includes('ts')) return 'ice';
-  if (worldSlug.includes('rust') || worldSlug.includes('c++') || worldSlug.includes('cpp'))
-    return 'lava';
-  if (worldSlug.includes('go') || worldSlug.includes('galaxy')) return 'space';
-  return 'forest'; // python-forest + fallback
+// ─── World slug → chamber type ────────────────────────────────────────────────
+
+function selectChamber(hint: string): 'forest' | 'cyber' | 'ice' | 'lava' | 'space' {
+  if (hint.includes('javascript') || hint.includes('js')) return 'cyber';
+  if (hint.includes('typescript') || hint.includes('ts')) return 'ice';
+  if (hint.includes('rust') || hint.includes('c++') || hint.includes('cpp')) return 'lava';
+  if (hint.includes('go') || hint.includes('galaxy')) return 'space';
+  return 'forest';
 }
 
-// ─── Keyboard mover ──────────────────────────────────────────────────────────
-function KeyboardMover({
-  state,
-  onSave,
-}: {
-  state: SceneState;
-  onSave: (position: SceneState['playerPosition']) => void;
-}) {
-  const position = useRef(
-    new THREE.Vector3(state.playerPosition.x, state.playerPosition.y, state.playerPosition.z),
-  );
-  const keys = useRef(new Set<string>());
-  useEffect(() => {
-    const down = (e: KeyboardEvent) => keys.current.add(e.key.toLowerCase());
-    const up = (e: KeyboardEvent) => keys.current.delete(e.key.toLowerCase());
-    window.addEventListener('keydown', down);
-    window.addEventListener('keyup', up);
-    return () => {
-      window.removeEventListener('keydown', down);
-      window.removeEventListener('keyup', up);
-    };
-  }, []);
-  useFrame((_, delta) => {
-    const dir = new THREE.Vector3(
-      Number(keys.current.has('d')) - Number(keys.current.has('a')),
-      0,
-      Number(keys.current.has('s')) - Number(keys.current.has('w')),
-    );
-    if (dir.lengthSq() === 0) return;
-    dir.normalize().multiplyScalar(Math.min(delta, 0.05) * 4);
-    position.current.add(dir);
-    position.current.x = THREE.MathUtils.clamp(position.current.x, -7, 7);
-    position.current.z = THREE.MathUtils.clamp(position.current.z, -5.5, 5.5);
-    onSave({ x: position.current.x, y: position.current.y, z: position.current.z });
-  });
-  return null;
-}
+// Interact points per chamber type (must match positions above)
+const INTERACT_POINTS: Record<string, InteractPoint[]> = {
+  forest: [
+    { kind: 'clue', pos: new THREE.Vector3(-3.5, 0.6, 0.5) },
+    { kind: 'terminal', pos: new THREE.Vector3(0, 1.5, -2.5) },
+    { kind: 'door', pos: new THREE.Vector3(0, 1.8, -7.4) },
+  ],
+  cyber: [
+    { kind: 'clue', pos: new THREE.Vector3(3.5, 0.8, 1) },
+    { kind: 'terminal', pos: new THREE.Vector3(0, 1.4, -2.5) },
+    { kind: 'door', pos: new THREE.Vector3(0, 1.8, -7.4) },
+  ],
+  ice: [
+    { kind: 'clue', pos: new THREE.Vector3(-4, 0.8, 1) },
+    { kind: 'terminal', pos: new THREE.Vector3(0, 1.5, -2.5) },
+    { kind: 'door', pos: new THREE.Vector3(0, 1.8, -7.4) },
+  ],
+  lava: [
+    { kind: 'clue', pos: new THREE.Vector3(3, 0.6, 1) },
+    { kind: 'terminal', pos: new THREE.Vector3(0, 1.2, -2.5) },
+    { kind: 'door', pos: new THREE.Vector3(0, 1.8, -7.4) },
+  ],
+  space: [
+    { kind: 'clue', pos: new THREE.Vector3(-3.5, 1, 1) },
+    { kind: 'terminal', pos: new THREE.Vector3(0, 1.5, -2.5) },
+    { kind: 'door', pos: new THREE.Vector3(0, 1.8, -7.4) },
+  ],
+};
 
-// ─── Main export ─────────────────────────────────────────────────────────────
+const INTERACT_RADIUS = 2.8;
+const PLAYER_COLOR: Record<string, string> = {
+  forest: '#00ff88',
+  cyber: '#a78bfa',
+  ice: '#7dd3fc',
+  lava: '#fb923c',
+  space: '#34d399',
+};
+
+// ─── Main component ───────────────────────────────────────────────────────────
+
 export function EscapeRoom3D({
   level,
   completed,
   onChallenge,
-  onRefresh,
+  onClue,
+  onDoor,
   onFallback,
 }: {
   level: WorldLevel;
   completed: boolean;
   onChallenge: () => void;
-  onRefresh: () => void;
+  onClue: () => void;
+  onDoor: () => void;
   onFallback: () => void;
 }) {
-  const [sceneState, setSceneState] = useState<SceneState>({
-    playerPosition: { x: 0, y: 1.6, z: 4 },
-    unlockedObjects: [],
-    sceneProgress: {},
-  });
   const [quality, setQuality] = useState<'low' | 'medium' | 'high'>('medium');
+  const [playerPos, setPlayerPos] = useState(() => new THREE.Vector3(0, 0.9, 3.5));
+  const [nearby, setNearby] = useState<NearbyObj>(null);
 
-  // Derive the world slug from the level so we can pick the right chamber.
-  // WorldLevel carries worldId but not world slug — use a fallback heuristic
-  // on the level title/description until the API exposes slug directly.
   const chamberType = useMemo(() => {
     const hint = (level.description ?? '') + ' ' + (level.title ?? '');
     return selectChamber(hint.toLowerCase());
   }, [level.description, level.title]);
 
+  // Persist scene state
+  const [sceneState, setSceneState] = useState<SceneState>({
+    playerPosition: { x: 0, y: 0.9, z: 3.5 },
+    unlockedObjects: [],
+    sceneProgress: {},
+  });
   useEffect(() => {
     void sceneApi
       .load(level.id)
-      .then((result) => {
-        setSceneState(result.state);
-      })
+      .then((r) => setSceneState(r.state))
       .catch(() => undefined);
   }, [level.id]);
-
   useEffect(() => {
-    const timer = window.setInterval(() => {
+    const t = window.setInterval(() => {
       void sceneApi.save(level.id, sceneState).catch(() => undefined);
     }, 5000);
-    return () => {
-      window.clearInterval(timer);
-    };
+    return () => window.clearInterval(t);
   }, [level.id, sceneState]);
 
-  const savePosition = (position: SceneState['playerPosition']) => {
-    setSceneState((curr) => ({ ...curr, playerPosition: position }));
-  };
+  // Recalculate nearby object whenever player moves
+  const handlePlayerMove = useCallback((pos: THREE.Vector3) => {
+    setPlayerPos(pos.clone());
+    setSceneState((curr) => ({ ...curr, playerPosition: { x: pos.x, y: pos.y, z: pos.z } }));
+  }, []);
 
-  const chamberProps = {
-    completed,
-    onTerminal: onChallenge,
-    onDoor: () => {
-      if (completed) onRefresh();
-    },
-  };
+  useEffect(() => {
+    const points = INTERACT_POINTS[chamberType] ?? [];
+    let closest: NearbyObj = null;
+    let bestDist = INTERACT_RADIUS;
+    for (const pt of points) {
+      const d = playerPos.distanceTo(pt.pos);
+      if (d < bestDist) {
+        bestDist = d;
+        closest = pt.kind;
+      }
+    }
+    setNearby(closest);
+  }, [playerPos, chamberType]);
+
+  // "Press E" keyboard handler
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key.toLowerCase() !== 'e' || !nearby) return;
+      e.preventDefault();
+      if (nearby === 'terminal') onChallenge();
+      else if (nearby === 'clue') onClue();
+      else if (nearby === 'door') onDoor();
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [nearby, onChallenge, onClue, onDoor]);
+
+  const chamberProps = { completed, playerPos, nearby };
+  const playerColor = PLAYER_COLOR[chamberType] ?? '#00ff88';
+
+  const bgColor =
+    chamberType === 'space'
+      ? '#000208'
+      : chamberType === 'lava'
+        ? '#120302'
+        : chamberType === 'ice'
+          ? '#020c1b'
+          : chamberType === 'cyber'
+            ? '#050010'
+            : '#030f09';
 
   return (
     <section
       className="relative h-[min(74vh,700px)] overflow-hidden rounded-2xl border border-white/10"
-      style={{
-        background:
-          chamberType === 'space'
-            ? '#000208'
-            : chamberType === 'lava'
-              ? '#120302'
-              : chamberType === 'ice'
-                ? '#020c1b'
-                : chamberType === 'cyber'
-                  ? '#050010'
-                  : '#030f09',
-      }}
+      style={{ background: bgColor }}
       aria-label="3D escape room"
     >
       <Canvas
@@ -810,7 +1128,7 @@ export function EscapeRoom3D({
         camera={{ position: [0, 4, 8], fov: 52 }}
         fallback={
           <div className="grid h-full place-items-center text-sm text-slate-300">
-            WebGL unavailable. Use 2D room.
+            WebGL unavailable — switch to 2D.
           </div>
         }
       >
@@ -819,10 +1137,11 @@ export function EscapeRoom3D({
         {chamberType === 'lava' && <LavaChamber {...chamberProps} />}
         {chamberType === 'space' && <SpaceChamber {...chamberProps} />}
         {chamberType === 'forest' && <ForestChamber {...chamberProps} />}
-        <KeyboardMover state={sceneState} onSave={savePosition} />
+
+        <PlayerCapsule color={playerColor} onPositionChange={handlePlayerMove} />
       </Canvas>
 
-      {/* HUD overlay */}
+      {/* HUD */}
       <div className="pointer-events-none absolute inset-x-0 top-0 flex items-start justify-between p-3">
         <div className="pointer-events-auto flex flex-wrap gap-2">
           <button
@@ -836,9 +1155,7 @@ export function EscapeRoom3D({
             Quality{' '}
             <select
               value={quality}
-              onChange={(e) => {
-                setQuality(e.target.value as typeof quality);
-              }}
+              onChange={(e) => setQuality(e.target.value as typeof quality)}
               className="ml-1 bg-transparent"
             >
               <option value="low">Low</option>
@@ -851,8 +1168,30 @@ export function EscapeRoom3D({
           {level.title}
         </div>
       </div>
-      <p className="pointer-events-none absolute inset-x-3 bottom-3 rounded-lg bg-black/60 py-2 text-center text-xs text-slate-400 backdrop-blur">
-        WASD to move · Drag to orbit · Click glowing object to interact
+
+      {/* Proximity prompt (HTML overlay, shows what E will do) */}
+      {nearby && (
+        <div className="pointer-events-none absolute inset-x-0 bottom-10 flex justify-center">
+          <span
+            className="flex items-center gap-2 rounded-full border border-white/20 bg-black/80 px-5 py-2 text-sm font-bold text-white backdrop-blur"
+            style={{ borderColor: playerColor + '66', color: playerColor }}
+          >
+            <kbd className="rounded border border-current bg-white/10 px-2 py-0.5 text-xs text-white">
+              E
+            </kbd>
+            {nearby === 'terminal'
+              ? 'Activate terminal'
+              : nearby === 'clue'
+                ? 'Read clue'
+                : completed
+                  ? 'Escape the room'
+                  : 'Try the gate'}
+          </span>
+        </div>
+      )}
+
+      <p className="pointer-events-none absolute inset-x-3 bottom-2 text-center text-[10px] text-slate-600">
+        WASD · move &nbsp;|&nbsp; Drag · orbit &nbsp;|&nbsp; E · interact
       </p>
     </section>
   );

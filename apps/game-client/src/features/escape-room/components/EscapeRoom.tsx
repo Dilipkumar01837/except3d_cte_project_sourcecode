@@ -295,7 +295,23 @@ export function EscapeRoom({ world, level, justCleared, onRefresh }: EscapeRoomP
             level={level}
             completed={state.isCompleted}
             onChallenge={startChallenge}
-            onRefresh={onRefresh}
+            onClue={() => {
+              setModal('clue');
+              setState((current) => {
+                if (current.clueRead) return current;
+                return {
+                  ...current,
+                  clueRead: true,
+                  objectives: current.objectives.map((objective) =>
+                    objective.id === 'clue' ? { ...objective, done: true } : objective,
+                  ),
+                };
+              });
+              void worldApi.recordDiscovery(level.id).catch(() => undefined);
+            }}
+            onDoor={() => {
+              setModal(state.isCompleted ? 'complete' : 'door');
+            }}
             onFallback={() => {
               setThreeEnabled(false);
               localStorage.setItem('cte:3d-room', 'off');
