@@ -61,11 +61,13 @@ export function createApp(): ReturnType<typeof express> {
 
   app.use(`${API_BASE_PATH}/health`, healthRouter);
   app.use(`${API_BASE_PATH}/auth`, authRouter);
+  // More-specific sub-paths must be registered before their parent prefix so
+  // Express does not match the parent router first and fall through incorrectly.
+  app.use(`${API_BASE_PATH}/player/daily-reward`, dailyRewardRouter);
   app.use(`${API_BASE_PATH}/player`, playerRouter);
   app.use(`${API_BASE_PATH}/challenges`, challengeRouter);
   app.use(`${API_BASE_PATH}/hints`, hintsRouter);
   app.use(`${API_BASE_PATH}/admin`, adminRouter);
-  app.use(`${API_BASE_PATH}/player/daily-reward`, dailyRewardRouter);
   app.use(`${API_BASE_PATH}/duels`, duelRouter);
   app.use(`${API_BASE_PATH}/telemetry`, telemetryRouter);
   app.use(`${API_BASE_PATH}/player`, sceneRouter);

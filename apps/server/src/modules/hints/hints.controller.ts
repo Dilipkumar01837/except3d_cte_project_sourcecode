@@ -1,5 +1,5 @@
 import type { Request, Response } from 'express';
-import { ProgrammingLanguage, type HintType } from '@prisma/client';
+import { ProgrammingLanguage } from '@prisma/client';
 import { prisma } from '../../shared/lib/prisma.js';
 import { sendError, sendSuccess } from '../../shared/lib/response.js';
 import { env } from '../../config/index.js';
@@ -75,7 +75,7 @@ export async function requestHint(req: Request, res: Response): Promise<void> {
       userId: id,
       challengeId: challenge.id,
       language: body.language as ProgrammingLanguage,
-      hintType: adaptive.hintType as HintType,
+      hintType: adaptive.hintType,
       hintText: adaptive.hint,
       contextSnapshot: JSON.parse(JSON.stringify(adaptive.contextSnapshot)) as object,
       attemptsBefore: adaptive.attemptsBefore,
@@ -100,10 +100,13 @@ export async function requestHint(req: Request, res: Response): Promise<void> {
 }
 
 export async function rateHint(req: Request, res: Response): Promise<void> {
+  // Call userId() first and bail out immediately — the helper already sends a
+  // 401 response, so writing any further response here would be a double-write.
   const id = userId(req, res);
+  if (!id) return;
   const hintId = req.params['id'];
   const helpful = (req.body as { helpful?: unknown }).helpful;
-  if (!id || typeof hintId !== 'string' || typeof helpful !== 'boolean') {
+  if (typeof hintId !== 'string' || typeof helpful !== 'boolean') {
     sendError(res, 400, 'VALIDATION_ERROR', 'helpful must be a boolean');
     return;
   }

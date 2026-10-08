@@ -6,7 +6,7 @@ import { env } from '../../config/index.js';
 import { prisma } from '../../shared/lib/prisma.js';
 import { redis } from '../../shared/lib/redis.js';
 import { verifyAccessToken } from '../../shared/lib/jwt.js';
-import { emitToDuel } from '../../shared/lib/socket.js';
+import { emitToDuel, authenticatedSockets } from '../../shared/lib/socket.js';
 import { createDuelSubmission } from './duel.service.js';
 
 const duelKey = (duelId: string) => `cte:duel:${duelId}:live`;
@@ -135,6 +135,24 @@ export function attachDuelRealtime(io: SocketServer): void {
 
   namespace.on('connection', (socket) => {
     const socketData = socket.data as DuelSocketData;
+    const duelUserId = socketData.userId ?? '';
+
+    // Register in the shared map so the server-wide suspension sweep also covers
+    // /duel sockets. The role is not used for duel authorisation but must be
+    // present because the sweep checks it for role-change updates.
+    void prisma.user
+      .findUnique({ where: { id: duelUserId }, select: { role: true } })
+      .then((user) => {
+        if (user) {
+          authenticatedSockets.set(socket.id, { userId: duelUserId, role: user.role });
+        }
+      })
+      .catch(() => undefined);
+
+    socket.on('disconnect', () => {
+      authenticatedSockets.delete(socket.id);
+    });
+
     socket.on('duel:join', async (payload: unknown, ack?: (result: unknown) => void) => {
       const parsed = z
         .object({ duelId: z.string().uuid(), spectator: z.boolean().optional() })
@@ -270,17 +288,15 @@ export function attachDuelRealtime(io: SocketServer): void {
         parsed.data.sourceCode,
       );
       if (!submission) return ack?.({ ok: false, error: 'DUEL_UNAVAILABLE' });
-      namespace
-        .to(`duel:${parsed.data.duelId}`)
-        .emit('duel:progress-update', {
-          duelId: parsed.data.duelId,
-          userId: identity(socket),
-          passed: 0,
-          total: 0,
-          elapsedMs: 0,
-          language: parsed.data.language,
-          status: 'SUBMITTED',
-        });
+      namespace.to(`duel:${parsed.data.duelId}`).emit('duel:progress-update', {
+        duelId: parsed.data.duelId,
+        userId: identity(socket),
+        passed: 0,
+        total: 0,
+        elapsedMs: 0,
+        language: parsed.data.language,
+        status: 'SUBMITTED',
+      });
       ack?.({ ok: true, submissionId: submission.id });
     });
 
@@ -296,13 +312,11 @@ export function attachDuelRealtime(io: SocketServer): void {
       const result = await access(parsed.data.duelId, identity(socket));
       if (!result) return ack?.({ ok: false, error: 'FORBIDDEN' });
       socketData.chatAt = Date.now();
-      namespace
-        .to(`duel:${parsed.data.duelId}`)
-        .emit('duel:chat-message', {
-          duelId: parsed.data.duelId,
-          userId: identity(socket),
-          message: parsed.data.message,
-        });
+      namespace.to(`duel:${parsed.data.duelId}`).emit('duel:chat-message', {
+        duelId: parsed.data.duelId,
+        userId: identity(socket),
+        message: parsed.data.message,
+      });
       ack?.({ ok: true });
     });
 

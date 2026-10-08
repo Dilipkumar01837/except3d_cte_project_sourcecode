@@ -98,6 +98,7 @@ export function chooseAdaptiveHintType(
 export async function generateAdaptiveHint(input: {
   userId: string;
   challenge: {
+    id: string;
     title: string;
     statement: string;
     difficulty: string;
@@ -115,14 +116,16 @@ export async function generateAdaptiveHint(input: {
         update: {},
       })
     : null;
+  // Use challengeId (unique primary key) not challenge.title — titles are not
+  // guaranteed unique and cross-challenge contamination corrupts personalisation.
   const previous = await prisma.hintHistory.findMany({
-    where: { userId: input.userId, challenge: { title: input.challenge.title } },
+    where: { userId: input.userId, challengeId: input.challenge.id },
     orderBy: { createdAt: 'desc' },
     take: 8,
     select: { hintText: true, hintType: true },
   });
   const attemptsBefore = await prisma.submission.count({
-    where: { userId: input.userId, challenge: { title: input.challenge.title } },
+    where: { userId: input.userId, challengeId: input.challenge.id },
   });
   const skillLevels = (profile?.skillLevels ?? {}) as Record<string, unknown>;
   const languageSkill = Number(skillLevels[input.language] ?? 1);

@@ -357,12 +357,15 @@ export async function oauthLogin(
   });
 
   if (!user) {
-    // Try to link by email
+    // Try to link by email — but only update the oauthId / avatarUrl, never
+    // overwrite authProvider. The user may have registered via email and still
+    // uses their password; changing authProvider to GOOGLE/GITHUB would make
+    // the admin dashboard misrepresent the account and confuse future audits.
     const existing = await prisma.user.findUnique({ where: { email } });
     if (existing) {
       user = await prisma.user.update({
         where: { id: existing.id },
-        data: { oauthId, authProvider: provider, avatarUrl: avatarUrl ?? existing.avatarUrl },
+        data: { oauthId, avatarUrl: avatarUrl ?? existing.avatarUrl },
         include: { profile: true },
       });
     } else {

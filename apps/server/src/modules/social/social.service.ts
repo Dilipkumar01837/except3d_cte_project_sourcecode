@@ -24,14 +24,13 @@ const pair = (a: string, b: string) =>
 const onlineKey = (userId: string) => `cte:social:online:${userId}`;
 
 export async function searchUsers(userId: string, query: string) {
+  // Search by username only — searching by email leaks whether a given address
+  // is registered (email enumeration) even though email is not in the response.
   return prisma.user.findMany({
     where: {
       id: { not: userId },
       isActive: true,
-      OR: [
-        { username: { contains: query, mode: 'insensitive' } },
-        { email: { contains: query, mode: 'insensitive' } },
-      ],
+      username: { contains: query, mode: 'insensitive' },
     },
     take: 20,
     select: publicUser,

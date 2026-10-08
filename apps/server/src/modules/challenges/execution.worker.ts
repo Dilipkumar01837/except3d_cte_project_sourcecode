@@ -81,6 +81,20 @@ export async function executeSubmission(submissionId: string): Promise<void> {
   let newLevel = 1;
   let completedTotal = 0;
 
+  // Check whether this player has already passed this challenge before, so we
+  // can skip XP / coin / completedChallenges awards on re-solves.
+  const alreadySolved =
+    result.status === 'ACCEPTED'
+      ? (await prisma.submission.count({
+          where: {
+            userId: submission.userId,
+            challengeId: submission.challengeId,
+            id: { not: submission.id },
+            status: 'ACCEPTED',
+          },
+        })) > 0
+      : false;
+
   // Escape-room progression is only advanced by a normal (non-duel) submission
   // whose room is genuinely reachable. The HTTP gate already rejects locked
   // submissions, but re-checking here means no other enqueue path can slip past
@@ -122,21 +136,36 @@ export async function executeSubmission(submissionId: string): Promise<void> {
       resolvedAt: new Date(),
     });
     const profile = await tx.profile.findUniqueOrThrow({ where: { userId: submission.userId } });
-    newXp = profile.xp + reward.xp;
-    newLevel = Math.max(1, Math.floor(Math.sqrt(newXp / 100)) + 1);
-    completedTotal = profile.completedChallenges + 1;
-    await tx.profile.update({
-      where: { userId: submission.userId },
-      data: {
-        xp: newXp,
-        coins: profile.coins + reward.coins,
-        level: newLevel,
-        rank: nextRank(newLevel),
-        completedChallenges: { increment: 1 },
-        gamesPlayed: { increment: 1 },
-        accuracy: Math.max(profile.accuracy, reward.score / 100),
-      },
-    });
+
+    if (!alreadySolved) {
+      // First-time solve: award XP, coins, and increment completedChallenges.
+      newXp = profile.xp + reward.xp;
+      newLevel = Math.max(1, Math.floor(Math.sqrt(newXp / 100)) + 1);
+      completedTotal = profile.completedChallenges + 1;
+      await tx.profile.update({
+        where: { userId: submission.userId },
+        data: {
+          xp: newXp,
+          coins: profile.coins + reward.coins,
+          level: newLevel,
+          rank: nextRank(newLevel),
+          completedChallenges: { increment: 1 },
+          gamesPlayed: { increment: 1 },
+          accuracy: Math.max(profile.accuracy, reward.score / 100),
+        },
+      });
+    } else {
+      // Re-solve: keep current values so achievements/notifications use real
+      // numbers but don't pay out again.
+      newXp = profile.xp;
+      newLevel = profile.level;
+      completedTotal = profile.completedChallenges;
+      // Still count the game played (the player did run code again).
+      await tx.profile.update({
+        where: { userId: submission.userId },
+        data: { gamesPlayed: { increment: 1 } },
+      });
+    }
     const gameLevel = submission.challenge.gameLevel;
     if (gameLevel && room?.access === 'OPEN') {
       const previousProgress = await tx.playerLevelProgress.findUnique({
@@ -247,14 +276,17 @@ export async function executeSubmission(submissionId: string): Promise<void> {
         });
       }
     }
-    await tx.playerNotification.create({
-      data: {
-        userId: submission.userId,
-        type: 'LEVEL_COMPLETED',
-        title: 'Challenge complete',
-        body: `You earned ${String(reward.xp)} XP and ${String(reward.coins)} coins.`,
-      },
-    });
+    // Only send the "challenge complete" notification on the first solve.
+    if (!alreadySolved) {
+      await tx.playerNotification.create({
+        data: {
+          userId: submission.userId,
+          type: 'LEVEL_COMPLETED',
+          title: 'Challenge complete',
+          body: `You earned ${String(reward.xp)} XP and ${String(reward.coins)} coins.`,
+        },
+      });
+    }
   });
   await redis.setex(
     `cte:submission:${submission.id}`,
@@ -267,8 +299,8 @@ export async function executeSubmission(submissionId: string): Promise<void> {
     }),
   );
 
-  if (result.status === 'ACCEPTED') {
-    // Update Redis leaderboard
+  if (result.status === 'ACCEPTED' && !alreadySolved) {
+    // Update Redis leaderboard — only meaningful on first solve (XP was awarded).
     if (reward.xp > 0) {
       void updateLeaderboard(submission.userId, reward.xp);
     }
@@ -307,13 +339,14 @@ export async function executeSubmission(submissionId: string): Promise<void> {
     });
   }
 
-  // Notify the player in real-time via Socket.IO
+  // Notify the player in real-time via Socket.IO.
+  // On a re-solve, report 0 XP/coins so the UI doesn't show a reward popup.
   emitToUser(submission.userId, 'submission:completed', {
     submissionId: submission.id,
     status: result.status,
     score: reward.score,
-    xpEarned: reward.xp,
-    coinsEarned: reward.coins,
+    xpEarned: alreadySolved ? 0 : reward.xp,
+    coinsEarned: alreadySolved ? 0 : reward.coins,
   });
   if (submission.duelId) {
     await publishDuelEvent(submission.duelId, 'duel:progress-update', {

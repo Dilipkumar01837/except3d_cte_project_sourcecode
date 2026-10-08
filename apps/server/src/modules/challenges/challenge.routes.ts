@@ -20,7 +20,9 @@ import { aiHintRateLimit, submissionRateLimit } from '../../shared/middleware/ra
 export const challengeRouter: IRouter = Router();
 challengeRouter.get('/', asyncHandler(listChallenges));
 challengeRouter.get('/:slug', optionalAuthenticate, asyncHandler(getChallenge));
-challengeRouter.get('/:slug/hints/:level', authenticate, asyncHandler(getHint));
+// Literal path segments (ai, ai-error, ai/:hintId/feedback) must be registered
+// BEFORE parameterised routes (/:level, /:level/feedback) so that Express does
+// not bind "ai" to the :level parameter and route to the wrong handler.
 challengeRouter.post('/:slug/hints/ai', authenticate, aiHintRateLimit, asyncHandler(getAiHint));
 challengeRouter.post(
   '/:slug/hints/ai-error',
@@ -29,14 +31,15 @@ challengeRouter.post(
   asyncHandler(getAiErrorHint),
 );
 challengeRouter.post(
-  '/:slug/hints/:level/feedback',
-  authenticate,
-  asyncHandler(submitHintFeedback),
-);
-challengeRouter.post(
   '/:slug/hints/ai/:hintId/feedback',
   authenticate,
   asyncHandler(submitAiHintFeedback),
+);
+challengeRouter.get('/:slug/hints/:level', authenticate, asyncHandler(getHint));
+challengeRouter.post(
+  '/:slug/hints/:level/feedback',
+  authenticate,
+  asyncHandler(submitHintFeedback),
 );
 challengeRouter.get('/:slug/submissions', authenticate, asyncHandler(listSubmissions));
 challengeRouter.get(
