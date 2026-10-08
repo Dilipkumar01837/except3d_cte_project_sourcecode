@@ -164,7 +164,9 @@ export function ProfilePage() {
           <h3 className="text-sm font-semibold text-white">Hint history</h3>
           {hintHistory.map((hint) => (
             <div key={hint.id} className="rounded-lg border border-white/10 p-3">
-              <p className="text-xs uppercase text-cyan-300">{hint.hintType.toLowerCase()}</p>
+              <p className="text-xs uppercase text-cyan-300">
+                {hint.hintType?.toLowerCase() ?? ''}
+              </p>
               <p className="mt-1 text-sm text-slate-300">{hint.hintText}</p>
             </div>
           ))}

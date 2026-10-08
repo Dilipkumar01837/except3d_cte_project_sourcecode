@@ -100,7 +100,7 @@ export function ChallengeListPage() {
             challenge.supportedLanguages.includes(
               language as ChallengeSummary['supportedLanguages'][number],
             )) &&
-          `${challenge.title} ${challenge.tags.join(' ')}`
+          `${challenge.title} ${(challenge.tags ?? []).join(' ')}`
             .toLowerCase()
             .includes(query.toLowerCase()),
       ),

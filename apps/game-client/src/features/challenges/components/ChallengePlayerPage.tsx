@@ -998,7 +998,7 @@ export function ChallengePlayerPage() {
                 <>
                   <div className="mt-2 flex flex-wrap items-center gap-2 text-[11px] text-cyan-200">
                     <span className="rounded border border-cyan-400/30 px-2 py-0.5">
-                      {aiHint.hintType.toLowerCase()}
+                      {aiHint.hintType?.toLowerCase() ?? ''}
                     </span>
                     {aiHint.personalized && <span>Personalized from your progress</span>}
                   </div>
