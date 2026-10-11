@@ -2,90 +2,145 @@
 
 ## Title
 
-**Code to Escape: A Web-Based Gamified Programming Learning Platform with Responsive Design**
+**Code to Escape: A Web-Based Gamified Programming Learning Platform**
 
 ## Abstract
 
-Code to Escape is a web-based gamified programming learning platform with responsive design.
-It combines structured coding challenges with escape-room progression, real-time competitive
-duels, adaptive AI hints, 3D web environments, social interaction, web push notifications,
-and learning measurement tools. The platform is designed to support motivation, repeated
-problem-solving practice, and retention through immediate feedback, progression systems,
-and personalized assistance. A formal user evaluation is planned or underway; verified
-statistical findings are not asserted in this synopsis until the anonymized study export has
-been analyzed according to the preregistered protocol.
+Code to Escape is a web-based gamified programming learning platform. It combines structured
+coding challenges with escape-room progression, real-time competitive duels, adaptive AI hints,
+3D web environments, social interaction, and learning measurement tools. The platform supports
+motivation and repeated problem-solving practice through immediate feedback, XP-based
+progression, and personalised assistance. No user-study results are asserted in this synopsis;
+effectiveness claims are evaluation hypotheses until participant data are collected and analyzed
+according to the preregistered protocol.
+
+---
 
 ## Background and Problem Statement
 
 Traditional programming practice often separates problem solving from motivation, feedback,
-and sustained engagement. Learners may receive limited guidance when they are stuck and may
-not have a clear view of their progress. Code to Escape addresses these challenges by placing
-programming tasks in a structured web experience with visible progression, immediate judging,
-adaptive hints, optional competition, and learning analytics.
+and sustained engagement. Learners may receive limited guidance when stuck and may not have
+a clear view of their progress. Code to Escape addresses these challenges by placing
+programming tasks inside a structured web experience with visible progression, immediate
+judging, adaptive hints, optional competition, and learning analytics.
+
+---
 
 ## Aim
 
-The aim is to design and implement a responsive web platform that supports programming
-practice through gamified challenges, escape-room progression, real-time interaction,
-personalized hints, and evidence-oriented learning measurement.
+To design and implement a web platform that supports programming practice through gamified
+challenges, escape-room progression, real-time interaction, personalised hints, and
+evidence-oriented learning measurement.
 
-## Proposed System
+---
 
-The proposed system provides:
+## Implemented System
 
-1. **Gamified learning:** worlds, levels, XP, coins, achievements, streaks, rankings, and
-   escape-room gates connected to published coding challenges.
-2. **Programming practice:** multi-language coding challenges evaluated by an isolated Docker
-   runner with visible and hidden test cases, scoring, attempts, and execution diagnostics.
-3. **Adaptive assistance:** context-aware Groq hints using the current challenge and code,
-   enhanced by a persistent learning profile, hint history, selectable hint types, feedback,
-   quota controls, and a local fallback when the AI provider is unavailable.
-4. **Real-time engagement:** authenticated Socket.IO duel rooms, matchmaking, spectators,
-   synchronized progress, chat, and server-authoritative results.
-5. **Immersive web environments:** React Three Fiber and Three.js escape-room scenes with a
-   responsive 2D fallback when WebGL is unavailable.
-6. **Social and notification features:** friends, presence, direct messages, blocking,
-   matchmaking, and opt-in Firebase Cloud Messaging notifications for web users.
-7. **Learning measurement:** pre/post assessments, sticky experiment assignments, delayed
-   post-test support in the research data model, consent-gated telemetry, anonymized export,
-   and an administrative learning analytics dashboard.
+The following features are implemented and can be verified by reading the repository:
 
-## Objectives
+### 1. Coding challenges with isolated execution
 
-- Implement a responsive web interface for programming challenges and progression.
-- Provide secure, isolated, multi-language code execution and feedback.
-- Use gamification and escape-room progression to support continued practice.
-- Provide context-aware and adaptive AI hints with effectiveness feedback and privacy controls.
-- Support real-time duels and social learning interactions.
-- Provide web-based 3D environments with an accessible 2D fallback.
-- Provide opt-in notifications and consent-gated learning measurement.
-- Provide administrative tools for challenge management, experiments, and learning analytics.
+- **42 beginner challenges** seeded across 7 programming languages: Python, Java, JavaScript,
+  TypeScript, C++, Go, Rust (source: `apps/server/scripts/seed-beginner-challenges.ts`).
+- 6 additional challenge types: ALGORITHMS, DATA_STRUCTURES, DEBUGGING, OUTPUT_PREDICTION,
+  FILL_IN_THE_BLANK, CODE_COMPLETION.
+- Code is executed inside an ephemeral Docker container with full isolation:
+  `--cap-drop ALL`, `--network none`, `--read-only`, `--user 65534:65534`, `--pids-limit 64`,
+  per-challenge memory and time limits.
+- Submissions are processed asynchronously via a Redis queue. A dedicated worker judges each
+  submission and emits the result over Socket.IO.
 
-## Evaluation Plan and Evidence Status
+### 2. Escape-room progression
+
+- **6 game worlds** with 3 levels each: Python Forest, Java Lake, JavaScript Jungle,
+  TypeScript Tundra, Rust Realm, Go Galaxy.
+- Each level is gated by a coding challenge. Completing a level awards a key; a higher level
+  in the same world may require that key to unlock (key-and-lock mechanic).
+- Players accumulate XP to unlock higher-difficulty worlds.
+- Each world has a bespoke 2D room layout (hand-crafted in `room-config.ts`) and a
+  biome-matched 3D environment (React Three Fiber).
+
+### 3. Real-time duels
+
+- Two players are matched in a lobby and solve the same challenge simultaneously.
+- The winner is determined by score (test cases passed × time bonus), not by first submission.
+- Progress is broadcast in real time over Socket.IO.
+
+### 4. Adaptive AI hints
+
+- On-demand hints generated by Groq (`llama-3.3-70b-versatile`) using the player's current
+  code and error output.
+- Limited to 20 hints per user per 24 hours. Requires `GROQ_API_KEY` in the environment;
+  gracefully disabled when the key is absent.
+- Players can vote on hint quality (thumbs up/down).
+
+### 5. Gamification and social features
+
+- XP, daily login rewards, achievements, global leaderboard.
+- Friends system, friend requests, blocking.
+- In-app notifications.
+- Optional Firebase Cloud Messaging push notifications.
+
+### 6. Admin dashboard
+
+- Separate React application for managing challenges, test cases, worlds, and users.
+- Role-based access: PLAYER, ADMIN, SUPER_ADMIN.
+- Full audit log of admin actions.
+
+### 7. Learning measurement infrastructure
+
+- Consent-gated engagement telemetry (events stored only after opt-in).
+- Pre/post assessment model with sticky experiment assignments.
+- Administrative analytics summary endpoint.
+
+---
+
+## System scale (measured from repository)
+
+| Artefact                     | Count                                                   |
+| ---------------------------- | ------------------------------------------------------- |
+| Prisma database models       | 48                                                      |
+| API routers                  | 15 (mounted in `create-app.ts`)                         |
+| Client-side routes           | 22                                                      |
+| Server integration tests     | 173 passing, 13 skipped                                 |
+| Game-client unit tests       | 14 passing                                              |
+| Seeded languages             | 7 (Python, Java, JavaScript, TypeScript, C++, Go, Rust) |
+| Seeded beginner challenges   | 42 (7 languages × 6 problems)                           |
+| Seeded game worlds           | 6                                                       |
+| Hand-crafted 2D room configs | 18 (6 worlds × 3 levels)                                |
+| 3D biome environments        | 5 (forest, cyber, ice, lava, space)                     |
+
+---
+
+## Evaluation plan and evidence status
 
 The evaluation protocol addresses five research questions: motivation, problem-solving speed,
 retention, hint effectiveness, and duel engagement. It uses a randomized between-subjects
-comparison between traditional coding exercises and Code to Escape, with pre-test, post-test,
-delayed post-test, motivation surveys, and anonymized opt-in telemetry. The minimum pilot
-target is 30 participants per condition; a larger sample is recommended for confirmatory power.
+comparison with pre-test, post-test, and anonymized opt-in telemetry.
 
-At the time of this revision, no verified study results are available in the repository.
-Accordingly, the evidence-safe conclusion is:
+At the time of this writing, **no verified study results are present in the repository**.
+The evidence-safe conclusion is:
 
 > Code to Escape is designed to support motivation, problem-solving practice, and retention
 > through gamified web learning, adaptive AI hints, real-time duels, and progress measurement.
 
-The wording may be changed to **“Pilot results suggest…”** only after a completed preliminary
-study has been quality-checked and analyzed. **“Results show…”** requires preregistered,
+The wording may be changed to **"Pilot results suggest…"** only after a completed preliminary
+study has been quality-checked and analyzed. **"Results show…"** requires preregistered,
 sufficiently powered evidence with reported uncertainty and effect sizes.
 
-## Scope Limitation
+---
 
-This project is web-only and uses responsive design. Mobile applications are outside the
-scope of this synopsis.
+## Scope limitation
+
+This project is **web-only**. No mobile application (React Native, Expo, or native) is
+included or planned. The interface uses responsive design for varying screen sizes.
+
+---
 
 ## Conclusion
 
 Code to Escape implements an integrated web platform for programming practice, game-based
-progression, personalized assistance, social interaction, and learning measurement. Its
-effectiveness claims remain evaluation hypotheses until real participant data are analyzed.
+progression, personalised assistance, social interaction, and learning measurement. The
+platform is fully functional — 187 automated tests pass, all 6 seeded worlds are playable,
+and the isolated code execution pipeline supports 7 programming languages. Effectiveness
+claims remain evaluation hypotheses until real participant data are collected and analyzed.
