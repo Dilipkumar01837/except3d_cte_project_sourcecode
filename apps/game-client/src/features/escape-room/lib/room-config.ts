@@ -157,6 +157,30 @@ const FORGE_APEX: RoomTheme = {
   player: '#fef08a',
 };
 
+const JAVA_SHALLOWS: RoomTheme = {
+  id: 'java-lake',
+  sky: 'linear-gradient(180deg, #020c18 0%, #0b2545 55%, #163172 100%)',
+  ground: 'linear-gradient(180deg, #1e4080 0%, #163172 100%)',
+  accent: '#60a5fa',
+  player: '#fbbf24',
+};
+
+const JAVA_REEF: RoomTheme = {
+  id: 'java-reef',
+  sky: 'linear-gradient(180deg, #021018 0%, #042a4a 60%, #075580 100%)',
+  ground: 'linear-gradient(180deg, #0c4a6e 0%, #075580 100%)',
+  accent: '#38bdf8',
+  player: '#fef08a',
+};
+
+const JAVA_DEEP: RoomTheme = {
+  id: 'java-deep',
+  sky: 'linear-gradient(180deg, #010810 0%, #021828 55%, #053050 100%)',
+  ground: 'linear-gradient(180deg, #0c2a50 0%, #053050 100%)',
+  accent: '#7dd3fc',
+  player: '#fde047',
+};
+
 const GALAXY_DOCK: RoomTheme = {
   id: 'galaxy-dock',
   sky: 'linear-gradient(180deg, #000208 0%, #060d1f 55%, #0f172a 100%)',
@@ -572,18 +596,110 @@ const ROOM_CONFIGS: Record<string, RoomConfig> = {
       '"The reactor core runs on interfaces. Implement the Stringer interface: define a struct and a String() method that returns a formatted description."',
     doorLabel: 'Reactor Gate',
   },
+
+  // ── JAVA LAKE ─────────────────────────────────────────────────────────────
+  'java-lake:1': {
+    key: 'java-lake:1',
+    title: 'Shallows',
+    subtitle: 'Wide, still water. The same sum challenge, this time in Java.',
+    theme: JAVA_SHALLOWS,
+    bounds: BOUNDS,
+    spawn: { x: 110, y: 490 },
+    obstacles: [
+      { x: 180, y: 70, width: 100, height: 80 },
+      { x: 600, y: 90, width: 90, height: 90 },
+      { x: 360, y: 420, width: 120, height: 70 },
+      { x: 740, y: 430, width: 100, height: 80 },
+    ],
+    objects: [
+      object('clue', 'clue', 'Lakeside marker', 230, 190, 'Press E to read the marker'),
+      object(
+        'terminal',
+        'terminal',
+        'Puzzle terminal',
+        510,
+        300,
+        'Press E to activate the terminal',
+      ),
+      object('door', 'door', 'Weir Gate', 962, 300, 'Press E to open the gate'),
+    ],
+    clueText:
+      '"The lake asks what the forest asked — but in Java. Read two integers from stdin and print their sum. Statically typed, but the logic is the same."',
+    doorLabel: 'Weir Gate',
+  },
+  'java-lake:2': {
+    key: 'java-lake:2',
+    title: 'Reef',
+    subtitle: 'Submerged rocks split the channel. Even flows left, odd flows right.',
+    theme: JAVA_REEF,
+    bounds: BOUNDS,
+    spawn: { x: 110, y: 110 },
+    obstacles: [
+      { x: 390, y: 80, width: 70, height: 200 },
+      { x: 390, y: 360, width: 70, height: 180 },
+      { x: 670, y: 170, width: 120, height: 90 },
+      { x: 170, y: 250, width: 90, height: 100 },
+    ],
+    objects: [
+      object('clue', 'clue', 'Current marker', 260, 460, 'Press E to read the marker'),
+      object(
+        'terminal',
+        'terminal',
+        'Puzzle terminal',
+        490,
+        265,
+        'Press E to activate the terminal',
+      ),
+      object('door', 'door', 'Sluice Gate', 962, 300, 'Press E to open the gate'),
+    ],
+    clueText:
+      '"The reef separates even from odd. Read an integer. Print \\"Even\\" or \\"Odd\\". The Java compiler needs types; the logic needs a modulo."',
+    doorLabel: 'Sluice Gate',
+  },
+  'java-lake:3': {
+    key: 'java-lake:3',
+    title: 'Deep Water',
+    subtitle: 'Where three currents converge. Only the strongest survives.',
+    theme: JAVA_DEEP,
+    bounds: BOUNDS,
+    spawn: { x: 120, y: 500 },
+    obstacles: [
+      { x: 270, y: 80, width: 130, height: 95 },
+      { x: 610, y: 110, width: 110, height: 115 },
+      { x: 650, y: 400, width: 130, height: 85 },
+      { x: 240, y: 360, width: 100, height: 80 },
+      { x: 480, y: 470, width: 80, height: 60 },
+    ],
+    objects: [
+      object('clue', 'clue', 'Depth gauge', 190, 165, 'Press E to read the gauge'),
+      object(
+        'terminal',
+        'terminal',
+        'Puzzle terminal',
+        470,
+        270,
+        'Press E to activate the terminal',
+      ),
+      object('door', 'door', 'Deep Gate', 962, 300, 'Press E to open the gate'),
+    ],
+    clueText:
+      '"Three integers enter the deep water. Print the largest. Java gives you Math.max — use it twice, or write the comparison yourself."',
+    doorLabel: 'Deep Gate',
+  },
 };
 
 // ─── Generated fallback ────────────────────────────────────────────────────
 
 function generatedConfig(worldSlug: string, levelNumber: number, title: string): RoomConfig {
   // Pick a theme based on world slug for a more cohesive fallback.
+  // Only matches slugs that have no bespoke ROOM_CONFIGS entry above.
   let theme = GALAXY_DOCK;
   if (worldSlug.includes('python')) theme = FOREST_CLEARING;
   else if (worldSlug.includes('javascript') || worldSlug.includes('js')) theme = CYBER_GRID;
   else if (worldSlug.includes('typescript') || worldSlug.includes('ts')) theme = TUNDRA_PLAINS;
   else if (worldSlug.includes('rust') || worldSlug.includes('cpp') || worldSlug.includes('c++'))
     theme = FORGE_ENTRY;
+  else if (worldSlug.includes('java')) theme = JAVA_SHALLOWS;
 
   return {
     key: `${worldSlug}:${String(levelNumber)}`,

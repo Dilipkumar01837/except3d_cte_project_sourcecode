@@ -36,6 +36,9 @@ test-results/
 # Prisma
 database/prisma/migrations/**/migration.sql.bak
 
+# Vite node build artefacts (committed by mistake in early dev)
+dist-node/
+
 # Misc
 *.tsbuildinfo
 .eslintcache

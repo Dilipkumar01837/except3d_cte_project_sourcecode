@@ -107,6 +107,9 @@ jobs:
           REQUIRE_REDIS: '1'
         run: pnpm --filter @code-to-escape/server test
 
+      - name: Run game-client unit tests
+        run: pnpm --filter @code-to-escape/game-client test
+
       - name: Run code-runner unit tests
         run: pnpm --filter @code-to-escape/code-runner test
 

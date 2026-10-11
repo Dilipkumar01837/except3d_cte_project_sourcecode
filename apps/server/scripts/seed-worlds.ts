@@ -168,6 +168,215 @@ const worlds: WorldSeed[] = [
       },
     ],
   },
+  {
+    slug: 'javascript-jungle',
+    name: 'JavaScript Jungle',
+    description:
+      'A neon-lit cyber-jungle where closures grow like vines and prototypes evolve. Three rooms test the same fundamentals in JavaScript.',
+    difficulty: 2,
+    requiredXp: 150,
+    estimatedMinutes: 12,
+    keys: [
+      {
+        slug: 'javascript-jungle-access-card',
+        title: 'Access Card',
+        description: 'A magnetic-stripe card. The neon logo is barely readable.',
+        artKey: 'key-card',
+        grantedByLevelNumber: 1,
+      },
+    ],
+    locks: [
+      {
+        levelNumber: 3,
+        title: 'Nexus Lock',
+        prompt: 'A keypad panel. One slot accepts a magnetic card.',
+        requiresKeySlug: 'javascript-jungle-access-card',
+      },
+    ],
+    levels: [
+      {
+        number: 1,
+        title: 'Neon Threshold',
+        description: 'Sum two numbers, JavaScript-style.',
+        difficulty: 1,
+        xpReward: 55,
+        challengeSlug: 'javascript-sum-two-numbers',
+      },
+      {
+        number: 2,
+        title: 'The Callback Den',
+        description: 'Decide even or odd with a conditional.',
+        difficulty: 2,
+        xpReward: 55,
+        challengeSlug: 'javascript-even-or-odd',
+      },
+      {
+        number: 3,
+        title: 'Prototype Spire',
+        description: 'Find the largest of three values.',
+        difficulty: 2,
+        xpReward: 65,
+        challengeSlug: 'javascript-largest-of-three',
+      },
+    ],
+  },
+  {
+    slug: 'typescript-tundra',
+    name: 'TypeScript Tundra',
+    description:
+      'Frozen arctic ruins where every variable carries a type annotation. The compiler is judge and jury.',
+    difficulty: 3,
+    requiredXp: 350,
+    estimatedMinutes: 12,
+    keys: [
+      {
+        slug: 'typescript-tundra-frost-key',
+        title: 'Frost Key',
+        description: 'Carved from glacier ice. It does not melt.',
+        artKey: 'key-frost',
+        grantedByLevelNumber: 1,
+      },
+    ],
+    locks: [
+      {
+        levelNumber: 3,
+        title: 'Apex Gate',
+        prompt:
+          'A gate sealed by static analysis. Insert the frost key to satisfy the type checker.',
+        requiresKeySlug: 'typescript-tundra-frost-key',
+      },
+    ],
+    levels: [
+      {
+        number: 1,
+        title: 'Frozen Outpost',
+        description: 'Sum two numbers with strict TypeScript types.',
+        difficulty: 2,
+        xpReward: 60,
+        challengeSlug: 'typescript-sum-two-numbers',
+      },
+      {
+        number: 2,
+        title: 'The Type Vault',
+        description: 'Even or odd — let the type checker guide you.',
+        difficulty: 2,
+        xpReward: 60,
+        challengeSlug: 'typescript-even-or-odd',
+      },
+      {
+        number: 3,
+        title: 'Spire of Inference',
+        description: 'Find the largest of three: typed comparisons.',
+        difficulty: 3,
+        xpReward: 70,
+        challengeSlug: 'typescript-largest-of-three',
+      },
+    ],
+  },
+  {
+    slug: 'rust-realm',
+    name: 'Rust Realm',
+    description:
+      'An industrial lava forge where ownership is law. Every borrow is checked before the gate opens.',
+    difficulty: 4,
+    requiredXp: 600,
+    estimatedMinutes: 15,
+    keys: [
+      {
+        slug: 'rust-realm-iron-key',
+        title: 'Iron Key',
+        description: 'Forged at the entrance. The borrow checker stamped it valid.',
+        artKey: 'key-iron',
+        grantedByLevelNumber: 1,
+      },
+    ],
+    locks: [
+      {
+        levelNumber: 3,
+        title: 'Furnace Gate',
+        prompt: 'The furnace will not open without proof of ownership.',
+        requiresKeySlug: 'rust-realm-iron-key',
+      },
+    ],
+    levels: [
+      {
+        number: 1,
+        title: 'Forge Entrance',
+        description: 'Sum two numbers — Rust edition.',
+        difficulty: 3,
+        xpReward: 65,
+        challengeSlug: 'rust-sum-two-numbers',
+      },
+      {
+        number: 2,
+        title: 'Borrow Pits',
+        description: 'Even or odd: borrow a value without consuming it.',
+        difficulty: 3,
+        xpReward: 65,
+        challengeSlug: 'rust-even-or-odd',
+      },
+      {
+        number: 3,
+        title: 'Core Furnace',
+        description: 'Find the largest of three integers.',
+        difficulty: 4,
+        xpReward: 75,
+        challengeSlug: 'rust-largest-of-three',
+      },
+    ],
+  },
+  {
+    slug: 'go-galaxy',
+    name: 'Go Galaxy',
+    description:
+      'A deep-space station where goroutines orbit in silence and channels carry every signal. Three missions test Go fundamentals.',
+    difficulty: 3,
+    requiredXp: 450,
+    estimatedMinutes: 12,
+    keys: [
+      {
+        slug: 'go-galaxy-beacon-key',
+        title: 'Beacon Key',
+        description: 'A compact transmitter chip. Whoever holds it controls the airlock.',
+        artKey: 'key-beacon',
+        grantedByLevelNumber: 1,
+      },
+    ],
+    locks: [
+      {
+        levelNumber: 3,
+        title: 'Reactor Gate',
+        prompt: 'The reactor core is sealed. Insert the beacon key to open the gate.',
+        requiresKeySlug: 'go-galaxy-beacon-key',
+      },
+    ],
+    levels: [
+      {
+        number: 1,
+        title: 'Docking Bay',
+        description: 'Sum two numbers in Go.',
+        difficulty: 2,
+        xpReward: 60,
+        challengeSlug: 'go-sum-two-numbers',
+      },
+      {
+        number: 2,
+        title: 'Engine Room',
+        description: 'Even or odd: a simple conditional in Go.',
+        difficulty: 2,
+        xpReward: 60,
+        challengeSlug: 'go-even-or-odd',
+      },
+      {
+        number: 3,
+        title: 'Reactor Core',
+        description: 'Find the largest of three — interfaces fuel the reactor.',
+        difficulty: 3,
+        xpReward: 70,
+        challengeSlug: 'go-largest-of-three',
+      },
+    ],
+  },
 ];
 
 /**

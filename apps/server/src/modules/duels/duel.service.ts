@@ -119,14 +119,22 @@ export async function createDuelSubmission(
   try {
     await enqueueSubmission(submission.id);
   } catch (error) {
-    // The queue is required to judge the submission; do not pretend it was
-    // enqueued. Surface the failure so it is visible rather than leaving the
-    // submission silently stuck in QUEUED.
+    // The queue is unavailable. Mirror challenge.controller.ts: mark the
+    // submission as INTERNAL_ERROR immediately so neither the player nor the
+    // duel sweeper sees it stuck forever in QUEUED.
     process.stderr.write(
-      `[duels] failed to enqueue submission ${submission.id}: ${
+      `[duels] queue unavailable — marking submission ${submission.id} as INTERNAL_ERROR: ${
         error instanceof Error ? error.message : String(error)
       }\n`,
     );
+    await prisma.submission.update({
+      where: { id: submission.id },
+      data: {
+        status: 'INTERNAL_ERROR',
+        compilerOutput: 'The execution queue is currently unavailable. Please try again shortly.',
+        completedAt: new Date(),
+      },
+    });
   }
   return submission;
 }

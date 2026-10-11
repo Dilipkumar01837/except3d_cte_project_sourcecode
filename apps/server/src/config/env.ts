@@ -65,7 +65,9 @@ export const env = {
   codeRunnerUrl: getEnv('CODE_RUNNER_URL', 'http://localhost:3002'),
   codeRunnerToken: getSecret('CODE_RUNNER_TOKEN', 'code-to-escape-dev-runner-token'),
   groqApiKey: getEnv('GROQ_API_KEY', ''),
-  groqModel: getEnv('GROQ_MODEL', 'qwen/qwen3.8-27b'),
+  // llama-3.3-70b-versatile is Groq's generally-available high-quality model
+  // as of 2025. See docs/DecisionLog.md for the rationale.
+  groqModel: getEnv('GROQ_MODEL', 'llama-3.3-70b-versatile'),
   // AI hints cost money and time, so each account gets a metered allowance in a
   // rolling window (default: 20 hints per 24h). The count is the durable
   // AiHintHistory rows, so the limit is per user and survives restarts; the
