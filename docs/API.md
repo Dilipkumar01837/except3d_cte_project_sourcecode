@@ -1,198 +1,207 @@
 # API Reference
 
-## Base URL
-
-```
-http://localhost:3000/api/v1
-```
-
-All responses follow this envelope:
-
-```json
-{ "success": true, "data": { ... }, "meta": { "timestamp": "2026-..." } }
-```
-
-Errors:
-
-```json
-{
-  "success": false,
-  "error": { "code": "VALIDATION_ERROR", "message": "..." },
-  "meta": { "timestamp": "..." }
-}
-```
-
----
-
-## Authentication
-
-> All protected routes require `Authorization: Bearer <access_token>`.
-
-| Method | Endpoint                | Auth | Purpose                                  |
-| ------ | ----------------------- | ---- | ---------------------------------------- |
-| POST   | `/auth/register`        | —    | Create account + profile, returns tokens |
-| POST   | `/auth/login`           | —    | Email/password login, returns tokens     |
-| POST   | `/auth/refresh`         | —    | Rotate refresh token                     |
-| POST   | `/auth/logout`          | —    | Revoke refresh token family              |
-| POST   | `/auth/forgot-password` | —    | Send reset link                          |
-| POST   | `/auth/reset-password`  | —    | Apply new password with valid token      |
-| GET    | `/auth/google`          | —    | Initiate Google OAuth flow               |
-| GET    | `/auth/google/callback` | —    | Google OAuth callback                    |
-| GET    | `/auth/github`          | —    | Initiate GitHub OAuth flow               |
-| GET    | `/auth/github/callback` | —    | GitHub OAuth callback                    |
+All endpoints are prefixed `/api/v1`. Authentication uses `Authorization: Bearer <access_token>` (JWT, 15 min expiry) unless marked **public**.
 
 ---
 
 ## Health
 
-| Method | Endpoint            | Auth | Purpose                                                 |
-| ------ | ------------------- | ---- | ------------------------------------------------------- |
-| GET    | `/health`           | —    | Liveness check — `{ "status": "ok" }`                   |
-| GET    | `/health/readiness` | —    | Readiness — checks DB + Redis + code runner; 200 or 503 |
+### `GET /api/v1/health`
+
+**Public.** Returns service status.
+
+```json
+{ "status": "ok" }
+```
 
 ---
 
-## Player
+## Auth — `/api/v1/auth`
 
-> All routes require authentication.
-
-| Method | Endpoint                         | Purpose                                             |
-| ------ | -------------------------------- | --------------------------------------------------- |
-| GET    | `/player/dashboard`              | Profile summary, recent activity                    |
-| GET    | `/player/worlds`                 | Published worlds with progress                      |
-| GET    | `/player/worlds/:worldId/levels` | World levels with per-level progress                |
-| GET    | `/player/achievements`           | Published achievements with unlock state            |
-| GET    | `/player/inventory`              | Player inventory                                    |
-| GET    | `/player/notifications`          | Latest 50 notifications                             |
-| PATCH  | `/player/notifications/:id/read` | Mark notification as read                           |
-| GET    | `/player/leaderboard`            | Global/weekly leaderboard (`?type=weekly&limit=50`) |
+| Method  | Path               | Auth   | Description                                           |
+| ------- | ------------------ | ------ | ----------------------------------------------------- |
+| `POST`  | `/register`        | public | Create account. Body: `{ username, email, password }` |
+| `POST`  | `/login`           | public | Returns `{ accessToken, refreshToken }`               |
+| `POST`  | `/refresh`         | public | Rotate refresh token. Body: `{ refreshToken }`        |
+| `POST`  | `/logout`          | public | Invalidate refresh token                              |
+| `GET`   | `/me`              | ✅     | Current user profile                                  |
+| `PATCH` | `/profile`         | ✅     | Update display name / avatar                          |
+| `POST`  | `/forgot-password` | public | Send reset email (always 200)                         |
+| `POST`  | `/reset-password`  | public | Body: `{ token, password }`                           |
 
 ---
 
-## Challenges
+## Player — `/api/v1/player`
 
-> All routes require authentication. Hidden test inputs/outputs are never sent to clients.
+| Method | Path                         | Auth | Description                                    |
+| ------ | ---------------------------- | ---- | ---------------------------------------------- |
+| `GET`  | `/dashboard`                 | ✅   | Dashboard summary (XP, level, recent activity) |
+| `GET`  | `/leaderboard`               | ✅   | Global XP leaderboard                          |
+| `GET`  | `/worlds`                    | ✅   | List published game worlds                     |
+| `GET`  | `/worlds/:worldId/levels`    | ✅   | Levels for a world (with player progress)      |
+| `GET`  | `/achievements`              | ✅   | All achievements + which the player has earned |
+| `GET`  | `/notifications`             | ✅   | Unread notifications                           |
+| `POST` | `/levels/:levelId/discovery` | ✅   | Mark level discovered                          |
 
-| Method | Endpoint                                   | Purpose                                              |
-| ------ | ------------------------------------------ | ---------------------------------------------------- |
-| GET    | `/challenges`                              | List published challenges (pagination, filters)      |
-| GET    | `/challenges/:slug`                        | Challenge details + visible examples + hint metadata |
-| GET    | `/challenges/:slug/hints/:level`           | Reveal a paid hint (costs XP penalty)                |
-| POST   | `/challenges/:slug/submissions`            | Queue code for isolated execution (10 req/min)       |
-| GET    | `/challenges/:slug/submissions`            | Caller's submission history                          |
-| GET    | `/challenges/:slug/submissions/:id/status` | Poll status without leaking code/logs                |
-| GET    | `/challenges/:slug/submissions/:id`        | Full result (no hidden test I/O)                     |
+### Daily Reward — `/api/v1/player/daily-reward`
 
-**POST body:** `{ "language": "PYTHON", "sourceCode": "..." }`  
-Supported languages: `JAVA`, `PYTHON`, `JAVASCRIPT`, `TYPESCRIPT`, `CPP`, `GO`, `RUST`
-
----
-
-## Daily Reward
-
-> Requires authentication.
-
-| Method | Endpoint                      | Purpose                                       |
-| ------ | ----------------------------- | --------------------------------------------- |
-| GET    | `/player/daily-reward/status` | Current streak, claim status, next reward     |
-| POST   | `/player/daily-reward/claim`  | Claim today's reward (409 if already claimed) |
+| Method | Path     | Auth | Description                       |
+| ------ | -------- | ---- | --------------------------------- |
+| `GET`  | `/`      | ✅   | Current daily reward status       |
+| `POST` | `/claim` | ✅   | Claim today's reward (idempotent) |
 
 ---
 
-## Telemetry
+## Challenges — `/api/v1/challenges`
 
-> Consent-gated and **off by default**. Events are only stored once the player opts in. The event vocabulary is a fixed allow-list shared by the client and server; no IP address or user agent is stored, and the signals are engagement-only (never presented as evidence of learning).
+| Method | Path                            | Auth | Description                                         |
+| ------ | ------------------------------- | ---- | --------------------------------------------------- |
+| `GET`  | `/`                             | ✅   | List published challenges                           |
+| `GET`  | `/:slug`                        | ✅   | Challenge detail (statement, starter code, hints)   |
+| `POST` | `/:slug/runs`                   | ✅   | Run code against visible test cases (not persisted) |
+| `POST` | `/:slug/submissions`            | ✅   | Submit code for full judging (async, returns 202)   |
+| `GET`  | `/:slug/submissions`            | ✅   | Player's submission history for this challenge      |
+| `GET`  | `/:slug/submissions/:id`        | ✅   | Own submission detail                               |
+| `GET`  | `/:slug/submissions/:id/status` | ✅   | Lightweight status poll                             |
 
-| Method | Endpoint             | Purpose                                                                    |
-| ------ | -------------------- | -------------------------------------------------------------------------- |
-| GET    | `/telemetry/consent` | Current opt-in state with consent timestamp and policy version             |
-| PATCH  | `/telemetry/consent` | Set opt-in (`{ "optIn": true }`) with an audit timestamp                   |
-| POST   | `/telemetry/events`  | Submit a batch (`{ sessionId, events: [{ name, payload? }] }`); always 202 |
+### Hints — `/api/v1/hints`
 
-Allowed event names: `session_start`, `world_enter`, `level_start`, `level_complete`, `challenge_open`, `hint_reveal`, `duel_join`, `daily_reward_claim`.
-
----
-
-## Admin
-
-> Requires `ADMIN` or `SUPER_ADMIN` role.
-
-### Overview & System
-
-| Method | Endpoint                   | Purpose                                              |
-| ------ | -------------------------- | ---------------------------------------------------- |
-| GET    | `/admin/overview`          | Aggregate platform stats                             |
-| GET    | `/admin/system`            | Live service health + queue depth + uptime           |
-| GET    | `/admin/audit`             | Paginated admin action audit log                     |
-| GET    | `/admin/telemetry/summary` | Aggregate engagement counts (no per-user drill-down) |
-
-### User Management
-
-| Method | Endpoint                      | Purpose                                             |
-| ------ | ----------------------------- | --------------------------------------------------- |
-| GET    | `/admin/users`                | Paginated user list (`?search=&role=&page=&limit=`) |
-| GET    | `/admin/users/:id`            | User detail + recent sessions/login history         |
-| PATCH  | `/admin/users/:id/role`       | Change role — logged to audit                       |
-| POST   | `/admin/users/:id/suspend`    | Suspend + revoke tokens — logged to audit           |
-| POST   | `/admin/users/:id/reactivate` | Reactivate — logged to audit                        |
-
-### Challenge Management
-
-| Method | Endpoint                                 | Purpose                                    |
-| ------ | ---------------------------------------- | ------------------------------------------ |
-| GET    | `/admin/challenges`                      | Paginated challenge list                   |
-| POST   | `/admin/challenges`                      | Create challenge                           |
-| GET    | `/admin/challenges/:id`                  | Challenge detail + test cases + hints      |
-| PATCH  | `/admin/challenges/:id`                  | Update challenge                           |
-| DELETE | `/admin/challenges/:id`                  | Delete (soft-archive if submissions exist) |
-| POST   | `/admin/challenges/:id/publish`          | Publish — logged to audit                  |
-| POST   | `/admin/challenges/:id/unpublish`        | Unpublish — logged to audit                |
-| POST   | `/admin/challenges/:id/test-cases`       | Add test case                              |
-| PATCH  | `/admin/challenges/:id/test-cases/:tcId` | Update test case                           |
-| DELETE | `/admin/challenges/:id/test-cases/:tcId` | Delete test case                           |
-| POST   | `/admin/challenges/:id/hints`            | Add hint                                   |
-| PATCH  | `/admin/challenges/:id/hints/:hintId`    | Update hint                                |
-| DELETE | `/admin/challenges/:id/hints/:hintId`    | Delete hint                                |
-
-### Worlds & Levels
-
-| Method | Endpoint                            | Purpose                                    |
-| ------ | ----------------------------------- | ------------------------------------------ |
-| GET    | `/admin/worlds`                     | All worlds with levels                     |
-| POST   | `/admin/worlds`                     | Create world                               |
-| PATCH  | `/admin/worlds/:id`                 | Update world                               |
-| DELETE | `/admin/worlds/:id`                 | Delete (blocked if player progress exists) |
-| POST   | `/admin/worlds/:id/levels`          | Create level                               |
-| PATCH  | `/admin/worlds/:id/levels/:levelId` | Update level                               |
-| DELETE | `/admin/worlds/:id/levels/:levelId` | Delete level                               |
-
-### Achievements
-
-| Method | Endpoint                            | Purpose                     |
-| ------ | ----------------------------------- | --------------------------- |
-| GET    | `/admin/achievements`               | All achievements            |
-| POST   | `/admin/achievements`               | Create achievement          |
-| PATCH  | `/admin/achievements/:id`           | Update achievement          |
-| POST   | `/admin/achievements/:id/publish`   | Publish — logged to audit   |
-| POST   | `/admin/achievements/:id/unpublish` | Unpublish — logged to audit |
+| Method | Path                                 | Auth | Description                              |
+| ------ | ------------------------------------ | ---- | ---------------------------------------- |
+| `GET`  | `/:slug/hints/:level`                | ✅   | Reveal a numbered hint (costs XP)        |
+| `POST` | `/:slug/hints/:level/feedback`       | ✅   | Submit helpful/not-helpful vote          |
+| `POST` | `/:slug/hints/ai`                    | ✅   | Request AI-generated hint (rate-limited) |
+| `POST` | `/:slug/hints/ai/:aiHintId/feedback` | ✅   | Vote on AI hint                          |
 
 ---
 
-## Real-Time (Socket.IO)
+## Duels — `/api/v1/duels`
 
-Connect to `ws://localhost:3000` with `{ auth: { token: "<access_token>" } }`.
-
-| Event (server→client)  | Payload                                                  | When                       |
-| ---------------------- | -------------------------------------------------------- | -------------------------- |
-| `submission:completed` | `{ submissionId, status, score, xpEarned, coinsEarned }` | Worker finishes execution  |
-| `achievement:unlocked` | `{ achievementId, name, xpReward }`                      | Achievement engine unlocks |
+| Method | Path                   | Auth             | Description                            |
+| ------ | ---------------------- | ---------------- | -------------------------------------- |
+| `GET`  | `/`                    | ✅               | List open duels joinable by the player |
+| `POST` | `/`                    | ✅               | Create a new duel lobby                |
+| `GET`  | `/:duelId`             | ✅ (participant) | Duel state                             |
+| `POST` | `/:duelId/join`        | ✅               | Join an open lobby                     |
+| `POST` | `/:duelId/submissions` | ✅ (participant) | Submit code in a live duel             |
 
 ---
 
-## Rate Limits
+## Social — `/api/v1/social`
 
-| Scope          | Limit                   |
-| -------------- | ----------------------- |
-| General API    | 200 req / 15 min per IP |
-| Auth endpoints | 20 req / 15 min per IP  |
-| Submissions    | 10 req / 1 min per user |
+| Method   | Path               | Auth | Description         |
+| -------- | ------------------ | ---- | ------------------- |
+| `GET`    | `/friends`         | ✅   | Friend list         |
+| `POST`   | `/friends/request` | ✅   | Send friend request |
+| `POST`   | `/friends/accept`  | ✅   | Accept a request    |
+| `DELETE` | `/friends/:userId` | ✅   | Remove friend       |
+| `POST`   | `/block/:userId`   | ✅   | Block user          |
+
+---
+
+## Notifications — `/api/v1/notifications`
+
+| Method  | Path        | Auth | Description        |
+| ------- | ----------- | ---- | ------------------ |
+| `GET`   | `/`         | ✅   | List notifications |
+| `PATCH` | `/:id/read` | ✅   | Mark as read       |
+
+---
+
+## Learning — `/api/v1/learning`
+
+| Method | Path               | Auth | Description                                     |
+| ------ | ------------------ | ---- | ----------------------------------------------- |
+| `GET`  | `/profile`         | ✅   | Player learning profile (strengths, weaknesses) |
+| `GET`  | `/recommendations` | ✅   | AI-recommended next challenges                  |
+
+---
+
+## Scenes — `/api/v1/player/scenes`
+
+| Method | Path              | Auth | Description                           |
+| ------ | ----------------- | ---- | ------------------------------------- |
+| `GET`  | `/:levelId/scene` | ✅   | Load saved 3D scene state for a level |
+| `PUT`  | `/:levelId/scene` | ✅   | Save 3D scene state                   |
+
+---
+
+## Telemetry — `/api/v1/telemetry`
+
+| Method  | Path       | Auth | Description                                   |
+| ------- | ---------- | ---- | --------------------------------------------- |
+| `GET`   | `/consent` | ✅   | Current consent status                        |
+| `PATCH` | `/consent` | ✅   | Update consent (opt in / opt out)             |
+| `POST`  | `/events`  | ✅   | Batch-send telemetry events (max 50 per call) |
+
+---
+
+## Admin — `/api/v1/admin`
+
+All admin routes require role `ADMIN` or `SUPER_ADMIN`.
+
+### Challenges
+
+| Method   | Path                               | Description                    |
+| -------- | ---------------------------------- | ------------------------------ |
+| `GET`    | `/challenges`                      | List all challenges            |
+| `POST`   | `/challenges`                      | Create challenge               |
+| `PATCH`  | `/challenges/:id`                  | Update challenge               |
+| `POST`   | `/challenges/:id/publish`          | Publish / unpublish            |
+| `POST`   | `/challenges/:id/test-cases`       | Add test case                  |
+| `PATCH`  | `/challenges/:id/test-cases/:tcId` | Update test case               |
+| `DELETE` | `/challenges/:id/test-cases/:tcId` | Delete test case               |
+| `POST`   | `/challenges/:id/hints`            | Add hint                       |
+| `DELETE` | `/challenges/:id/hints/:hintId`    | Delete hint                    |
+| `GET`    | `/challenges/:id`                  | Get challenge with full detail |
+
+### Worlds
+
+| Method  | Path          | Description     |
+| ------- | ------------- | --------------- |
+| `GET`   | `/worlds`     | List all worlds |
+| `POST`  | `/worlds`     | Create world    |
+| `PATCH` | `/worlds/:id` | Update world    |
+
+### Users
+
+| Method  | Path                 | Description            |
+| ------- | -------------------- | ---------------------- |
+| `GET`   | `/users`             | List users (paginated) |
+| `PATCH` | `/users/:id/role`    | Change user role       |
+| `POST`  | `/users/:id/suspend` | Suspend account        |
+
+### Telemetry
+
+| Method | Path                 | Description                                    |
+| ------ | -------------------- | ---------------------------------------------- |
+| `GET`  | `/telemetry/summary` | Aggregate telemetry summary (SUPER_ADMIN only) |
+
+---
+
+## WebSocket events
+
+The server uses Socket.IO at `/socket.io`. Authenticate by passing `{ auth: { token } }` on connect.
+
+| Event (server → client) | Payload                             | Description                      |
+| ----------------------- | ----------------------------------- | -------------------------------- |
+| `submission:completed`  | `{ submissionId, status, score }`   | Judging result                   |
+| `duel:progress`         | `{ duelId, userId, score }`         | Opponent made progress in a duel |
+| `duel:completed`        | `{ duelId, winnerId }`              | Duel resolved                    |
+| `notification:new`      | `{ notificationId, type, message }` | New notification                 |
+
+---
+
+## Response conventions
+
+- **200** — success with body
+- **201** — resource created
+- **202** — accepted (async work queued, e.g. submission)
+- **400** — validation error, body `{ error: string, issues?: ZodIssue[] }`
+- **401** — missing / expired token
+- **403** — authenticated but not authorised (role too low)
+- **404** — resource not found
+- **409** — conflict (e.g. duplicate email)
+- **422** — semantic validation failure
+- **429** — rate limit exceeded, header `Retry-After: <seconds>`
+- **503** — code-runner at capacity, header `Retry-After: 2`
