@@ -1,0 +1,66 @@
+# Production hardening overrides.
+#
+# This file overrides docker-compose.yml to replace the raw Docker socket
+# mount with a Tecnativa docker-socket-proxy that exposes only the Docker
+# API calls the code-runner needs (spawn + kill containers).
+#
+# Usage:
+#   docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
+#
+# The proxy is internal-only (no published ports). The code-runner reaches
+# it via the internal network at tcp://docker-proxy:2375.
+
+services:
+  docker-proxy:
+    image: tecnativa/docker-socket-proxy:0.3
+    container_name: cte-docker-proxy
+    restart: unless-stopped
+    environment:
+      # Allow only the calls the code-runner makes:
+      #   POST   /containers/create
+      #   POST   /containers/{id}/start
+      #   POST   /containers/{id}/kill
+      #   DELETE /containers/{id}
+      # Everything else (images, networks, volumes, swarm, exec, …) is denied.
+      CONTAINERS: 1
+      POST: 1
+      DELETE: 1
+      # Deny all categories not listed — the proxy defaults to deny-all.
+      NETWORKS: 0
+      SERVICES: 0
+      TASKS: 0
+      VOLUMES: 0
+      INFO: 0
+      AUTH: 0
+      BUILD: 0
+      COMMIT: 0
+      CONFIGS: 0
+      DISTRIBUTION: 0
+      EVENTS: 0
+      EXEC: 0
+      GRPC: 0
+      IMAGES: 0
+      NODES: 0
+      PING: 0
+      PLUGINS: 0
+      SECRETS: 0
+      SESSION: 0
+      SWARM: 0
+      SYSTEM: 0
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    networks:
+      - default
+    # The proxy itself needs root to bind the socket, but it drops privileges
+    # after startup. Do not remove the privileged flag.
+    privileged: true
+
+  code-runner:
+    # Remove the direct socket mount; use the proxy instead.
+    volumes: []
+    environment:
+      # Point the Docker CLI inside code-runner at the proxy.
+      DOCKER_HOST: tcp://docker-proxy:2375
+    depends_on:
+      docker-proxy:
+        condition: service_started
