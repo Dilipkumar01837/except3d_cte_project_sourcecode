@@ -118,8 +118,15 @@ export async function createDuelSubmission(
   });
   try {
     await enqueueSubmission(submission.id);
-  } catch {
-    // Redis queue offline
+  } catch (error) {
+    // The queue is required to judge the submission; do not pretend it was
+    // enqueued. Surface the failure so it is visible rather than leaving the
+    // submission silently stuck in QUEUED.
+    process.stderr.write(
+      `[duels] failed to enqueue submission ${submission.id}: ${
+        error instanceof Error ? error.message : String(error)
+      }\n`,
+    );
   }
   return submission;
 }

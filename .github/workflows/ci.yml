@@ -98,9 +98,13 @@ jobs:
       - name: Build shared package
         run: pnpm --filter @code-to-escape/shared build
 
+      # REQUIRE_REDIS=1 turns the live-Redis integration test from a silent skip
+      # into a failure when the Redis service above is missing, so a regression in
+      # the queue transport cannot hide behind a green run.
       - name: Run server unit tests
         env:
           NODE_ENV: test
+          REQUIRE_REDIS: '1'
         run: pnpm --filter @code-to-escape/server test
 
       - name: Run code-runner unit tests

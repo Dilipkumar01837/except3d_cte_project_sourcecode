@@ -1,5 +1,5 @@
 import { prisma } from '../../shared/lib/prisma.js';
-import { redis } from '../../shared/lib/redis.js';
+import { redis, isRedisReady, waitForRedisReady } from '../../shared/lib/redis.js';
 import { dequeueSubmission } from './execution.queue.js';
 import { calculateScore, nextRank } from './scoring.service.js';
 import { emitToUser } from '../../shared/lib/socket.js';
@@ -10,6 +10,24 @@ import { markHintsResolved } from './hint-outcome.js';
 import { resolveDuel } from '../duels/duel-resolve.js';
 import { resolveChallengeRoom } from '../worlds/challenge-room.service.js';
 import { publishDuelEvent } from '../duels/duel-realtime.js';
+
+/** Logs a failed best-effort side effect without letting it abort the job. */
+function logBackgroundError(label: string, error: unknown): void {
+  process.stderr.write(
+    `[worker] ${label} failed: ${error instanceof Error ? error.message : String(error)}\n`,
+  );
+}
+
+/**
+ * Achievement evaluation is fire-and-forget and must never crash the worker.
+ * Chain a rejection handler so a failure is logged instead of surfacing as an
+ * unhandled rejection.
+ */
+function runAchievements(input: Parameters<typeof evaluateAchievements>[0]): void {
+  void evaluateAchievements(input).catch((error: unknown) => {
+    logBackgroundError('achievement evaluation', error);
+  });
+}
 
 export async function executeSubmission(submissionId: string): Promise<void> {
   const submission = await prisma.submission.findUnique({
@@ -288,25 +306,34 @@ export async function executeSubmission(submissionId: string): Promise<void> {
       });
     }
   });
-  await redis.setex(
-    `cte:submission:${submission.id}`,
-    3_600,
-    JSON.stringify({
-      status: result.status,
-      score: reward.score,
-      executionTimeMs: result.executionTimeMs,
-      memoryUsedKb: result.memoryUsedKb,
-    }),
-  );
+  // Best-effort result cache. The submission is already durably recorded in
+  // PostgreSQL, so a Redis hiccup here must not abort the rest of the flow
+  // (leaderboard, achievements, socket notification, duel resolution).
+  try {
+    await redis.setex(
+      `cte:submission:${submission.id}`,
+      3_600,
+      JSON.stringify({
+        status: result.status,
+        score: reward.score,
+        executionTimeMs: result.executionTimeMs,
+        memoryUsedKb: result.memoryUsedKb,
+      }),
+    );
+  } catch (error) {
+    logBackgroundError(`cache write for submission ${submission.id}`, error);
+  }
 
   if (result.status === 'ACCEPTED' && !alreadySolved) {
     // Update Redis leaderboard — only meaningful on first solve (XP was awarded).
     if (reward.xp > 0) {
-      void updateLeaderboard(submission.userId, reward.xp);
+      void updateLeaderboard(submission.userId, reward.xp).catch((error: unknown) => {
+        logBackgroundError('leaderboard update', error);
+      });
     }
 
     // Evaluate achievements (non-blocking)
-    void evaluateAchievements({
+    runAchievements({
       userId: submission.userId,
       trigger: 'CHALLENGES_SOLVED',
       challengesSolved: completedTotal,
@@ -316,7 +343,7 @@ export async function executeSubmission(submissionId: string): Promise<void> {
     });
 
     if (completedTotal === 1) {
-      void evaluateAchievements({
+      runAchievements({
         userId: submission.userId,
         trigger: 'FIRST_CHALLENGE_SOLVED',
         challengesSolved: 1,
@@ -324,15 +351,15 @@ export async function executeSubmission(submissionId: string): Promise<void> {
     }
 
     if (reward.score === 100) {
-      void evaluateAchievements({
+      runAchievements({
         userId: submission.userId,
         trigger: 'PERFECT_SUBMISSION',
         isPerfect: true,
       });
     }
 
-    void evaluateAchievements({ userId: submission.userId, trigger: 'XP_REACHED', xp: newXp });
-    void evaluateAchievements({
+    runAchievements({ userId: submission.userId, trigger: 'XP_REACHED', xp: newXp });
+    runAchievements({
       userId: submission.userId,
       trigger: 'LEVEL_REACHED',
       level: newLevel,
@@ -359,7 +386,9 @@ export async function executeSubmission(submissionId: string): Promise<void> {
       status: 'COMPLETED',
       score: reward.score,
       submissionStatus: result.status,
-    }).catch(() => undefined);
+    }).catch((error: unknown) => {
+      logBackgroundError('duel progress publish', error);
+    });
   }
 
   if (submission.duelId && result.status === 'ACCEPTED') {
@@ -372,25 +401,101 @@ export async function executeSubmission(submissionId: string): Promise<void> {
       };
       emitToUser(resolution.creatorId, 'duel:completed', event);
       if (resolution.opponentId) emitToUser(resolution.opponentId, 'duel:completed', event);
-      await publishDuelEvent(submission.duelId, 'duel:result', event).catch(() => undefined);
+      await publishDuelEvent(submission.duelId, 'duel:result', event).catch((error: unknown) => {
+        logBackgroundError('duel result publish', error);
+      });
     }
   }
 }
 
-/** Starts a durable queue consumer. Deploy this process separately from the HTTP API. */
-export async function startExecutionWorker(): Promise<void> {
-  for (;;) {
+// Connection errors while Redis is down repeat on every iteration; log the
+// first and then at most once per window so recovery stays visible without a
+// log flood. A separate `recovered` line marks the end of the outage.
+const WORKER_ERROR_LOG_INTERVAL_MS = 5_000;
+let lastWorkerErrorLogAt = 0;
+
+function logWorkerError(message: string): void {
+  const now = Date.now();
+  if (now - lastWorkerErrorLogAt < WORKER_ERROR_LOG_INTERVAL_MS) return;
+  lastWorkerErrorLogAt = now;
+  process.stderr.write(`[worker] ${message}\n`);
+}
+
+/** Sleep that resolves early when the supplied signal is aborted. */
+function sleep(ms: number, signal?: AbortSignal): Promise<void> {
+  return new Promise((resolve) => {
+    const onAbort = (): void => {
+      clearTimeout(timer);
+      resolve();
+    };
+    const timer = setTimeout(() => {
+      signal?.removeEventListener('abort', onAbort);
+      resolve();
+    }, ms);
+    if (signal?.aborted) {
+      clearTimeout(timer);
+      resolve();
+      return;
+    }
+    signal?.addEventListener('abort', onAbort, { once: true });
+  });
+}
+
+export interface ExecutionWorkerOptions {
+  /** Aborts the loop after the in-flight iteration. */
+  signal?: AbortSignal;
+  /** Server-side blocking timeout for the dequeue. Defaults to 5s. */
+  dequeueTimeoutSeconds?: number;
+  /** Base delay for the retry backoff. Defaults to 250ms. */
+  retryBaseMs?: number;
+  /** Cap for the retry backoff. Defaults to 5s. */
+  retryMaxMs?: number;
+  /** Overridable for tests. */
+  dequeue?: (timeoutSeconds: number) => Promise<string | null>;
+  /** Overridable for tests. */
+  process?: (submissionId: string) => Promise<void>;
+}
+
+/**
+ * Starts a durable queue consumer. Deploy this process separately from the HTTP API.
+ *
+ * The Redis client disables its offline queue, so a command issued while it is
+ * not `ready` rejects immediately. The loop therefore waits for readiness before
+ * every dequeue and backs off with a capped, jittered delay on any failure, so a
+ * Redis outage or restart is survived instead of producing a tight error loop.
+ */
+export async function startExecutionWorker(options: ExecutionWorkerOptions = {}): Promise<void> {
+  const {
+    signal,
+    dequeueTimeoutSeconds = 5,
+    retryBaseMs = 250,
+    retryMaxMs = 5_000,
+    dequeue = dequeueSubmission,
+    process: processSubmission = executeSubmission,
+  } = options;
+
+  let consecutiveFailures = 0;
+
+  while (!signal?.aborted) {
     try {
-      const submissionId = await dequeueSubmission();
-      if (submissionId) await executeSubmission(submissionId);
+      if (!isRedisReady()) {
+        // Bounded wait; a timeout throws and is handled by the backoff below.
+        await waitForRedisReady();
+      }
+      const submissionId = await dequeue(dequeueTimeoutSeconds);
+      if (consecutiveFailures > 0) {
+        consecutiveFailures = 0;
+        process.stderr.write('[worker] Redis connection recovered\n');
+      }
+      if (submissionId) await processSubmission(submissionId);
     } catch (err) {
-      // Log and continue — one bad submission must not crash the entire worker.
-      // Transient Redis/DB errors are self-healing on the next iteration.
-      process.stderr.write(`[worker] unhandled error: ${String(err)}\n`);
-      // Brief pause to avoid tight error loops on persistent failures.
-      await new Promise<void>((resolve) => {
-        setTimeout(resolve, 2_000);
-      });
+      consecutiveFailures += 1;
+      const message = err instanceof Error ? err.message : String(err);
+      logWorkerError(`error (attempt ${String(consecutiveFailures)}): ${message} - retrying`);
+      // Bounded exponential backoff with jitter: prompt recovery, no tight loop.
+      const backoff = Math.min(retryBaseMs * 2 ** (consecutiveFailures - 1), retryMaxMs);
+      const jitter = Math.floor(backoff * 0.2 * Math.random());
+      await sleep(backoff + jitter, signal);
     }
   }
 }
