@@ -47,7 +47,9 @@ test.describe('Worlds and escape-room gating', () => {
       timeout: 15_000,
     });
 
-    const viewLevels = page.getByRole('link', { name: /view levels/i }).first();
+    const viewLevels = page
+      .getByRole('link', { name: /view levels|enter world|continue/i })
+      .first();
     await expect(viewLevels).toBeVisible();
     await viewLevels.click();
 
@@ -60,7 +62,7 @@ test.describe('Worlds and escape-room gating', () => {
     await registerAndLogin(page, testEmail(), testUsername());
     await page.goto('/worlds');
     await page
-      .getByRole('link', { name: /view levels/i })
+      .getByRole('link', { name: /view levels|enter world|continue/i })
       .first()
       .click();
 

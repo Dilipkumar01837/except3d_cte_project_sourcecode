@@ -56,7 +56,35 @@ export function DuelArenaPage() {
         : current,
     );
   }, []);
-  const realtime = useDuelRealtime(duelId, userId, handleResult);
+  const handleStarted = useCallback(() => {
+    setDuel((current) =>
+      current
+        ? {
+            ...current,
+            status: 'ACTIVE',
+            startedAt: new Date().toISOString(),
+          }
+        : current,
+    );
+  }, []);
+  const realtime = useDuelRealtime(duelId, userId, handleResult, handleStarted);
+
+  useEffect(() => {
+    if (!duelId || duel?.status !== 'OPEN') return;
+    const interval = window.setInterval(() => {
+      void duelApi
+        .get(duelId)
+        .then((item) => {
+          if (item.status !== 'OPEN') {
+            setDuel(item);
+          }
+        })
+        .catch(() => {});
+    }, 2000);
+    return () => {
+      window.clearInterval(interval);
+    };
+  }, [duelId, duel?.status]);
 
   useEffect(() => {
     if (!duelId) return;

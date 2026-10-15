@@ -1,6 +1,6 @@
 import { prisma } from '../../shared/lib/prisma.js';
 import type { ProgrammingLanguage } from '@prisma/client';
-import { emitToUser } from '../../shared/lib/socket.js';
+import { emitToDuel, emitToUser } from '../../shared/lib/socket.js';
 import { enqueueSubmission } from '../challenges/execution.queue.js';
 import { env } from '../../config/index.js';
 import { activeDuelCutoff, openDuelCutoff, type DuelWindows } from './duel-expiry.js';
@@ -82,6 +82,7 @@ export async function joinDuel(userId: string, duelId: string) {
   const duel = await prisma.duelMatch.findUnique({ where: { id: duelId }, select: duelSelect });
   if (!duel || !duel.opponent) return null;
   const event = { duelId: duel.id, status: duel.status, challenge: duel.challenge };
+  emitToDuel(duel.id, 'duel:started', event);
   emitToUser(duel.creator.id, 'duel:started', event);
   emitToUser(duel.opponent.id, 'duel:started', event);
   return duel;

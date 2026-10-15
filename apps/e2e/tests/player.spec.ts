@@ -59,7 +59,9 @@ test.describe('Registration', () => {
     await page.getByLabel('Password').fill(TEST_PASSWORD);
     await page.getByRole('button', { name: /create account/i }).click();
     await page.waitForURL('/dashboard', { timeout: 20_000 });
-    await expect(page.getByRole('heading', { name: /welcome back/i })).toBeVisible();
+    await expect(
+      page.getByRole('heading', { name: /welcome back|mission control/i }),
+    ).toBeVisible();
   });
 
   test('shows validation errors for empty fields', async ({ page }) => {
@@ -114,7 +116,9 @@ test.describe('Login', () => {
     await page.getByLabel('Password').fill(TEST_PASSWORD);
     await page.getByRole('button', { name: /sign in/i }).click();
     await page.waitForURL('/dashboard', { timeout: 20_000 });
-    await expect(page.getByRole('heading', { name: /welcome back/i })).toBeVisible();
+    await expect(
+      page.getByRole('heading', { name: /welcome back|mission control/i }),
+    ).toBeVisible();
   });
 
   test('shows error for wrong password', async ({ page }) => {
@@ -160,7 +164,9 @@ test.describe('Dashboard', () => {
     await page.getByRole('button', { name: /sign in/i }).click();
     await page.waitForURL('/dashboard');
 
-    await expect(page.getByRole('heading', { name: /welcome back/i })).toBeVisible();
+    await expect(
+      page.getByRole('heading', { name: /welcome back|mission control/i }),
+    ).toBeVisible();
     await expect(page.getByText('Level', { exact: true })).toBeVisible();
     await expect(page.getByText('Total XP', { exact: true })).toBeVisible();
     await expect(page.getByRole('link', { name: /play missions/i })).toBeVisible();

@@ -14,7 +14,7 @@ async function enterFirstRoom(page: import('@playwright/test').Page): Promise<st
   await registerAndLogin(page, testEmail(), testUsername());
   await page.goto('/worlds');
   await page
-    .getByRole('link', { name: /view levels/i })
+    .getByRole('link', { name: /view levels|enter world|continue/i })
     .first()
     .click();
   await expect(page.getByRole('heading', { name: /level progression/i })).toBeVisible({

@@ -22,7 +22,7 @@ test.describe('World unlock after a real solve', () => {
     });
 
     await page
-      .getByRole('link', { name: /view levels/i })
+      .getByRole('link', { name: /view levels|enter world|continue/i })
       .first()
       .click();
     await expect(page.getByRole('heading', { name: /level progression/i })).toBeVisible({

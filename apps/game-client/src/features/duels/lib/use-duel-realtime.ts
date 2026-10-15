@@ -38,6 +38,7 @@ export function useDuelRealtime(
   duelId: string,
   userId: string | undefined,
   onResult: (event: { winnerId: string | null; status: string }) => void,
+  onStarted?: () => void,
 ): DuelRealtimeApi {
   const socketRef = useRef<Socket | null>(null);
   const timerRef = useRef<number | undefined>(undefined);
@@ -81,6 +82,7 @@ export function useDuelRealtime(
     });
     socket.on('duel:started', () => {
       setCountdown(undefined);
+      onStarted?.();
     });
     socket.on('duel:result', onResult);
     socket.on('duel:spectator-join', (event: { count: number }) => {
@@ -97,7 +99,7 @@ export function useDuelRealtime(
       socket.disconnect();
       socketRef.current = null;
     };
-  }, [duelId, userId, onResult]);
+  }, [duelId, userId, onResult, onStarted]);
 
   const emitCode = (code: string, language: Language) => {
     window.clearTimeout(timerRef.current);
