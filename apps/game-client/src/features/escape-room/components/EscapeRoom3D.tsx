@@ -184,7 +184,7 @@ export function EscapeRoom3D({
   const [nearby, setNearby] = useState<NearbyObj>(null);
 
   const chamberType = useMemo(() => {
-    const hint = (level.description ?? '') + ' ' + (level.title ?? '');
+    const hint = level.description + ' ' + level.title;
     return selectChamber(hint.toLowerCase());
   }, [level.description, level.title]);
 
@@ -196,14 +196,18 @@ export function EscapeRoom3D({
   useEffect(() => {
     void sceneApi
       .load(level.id)
-      .then((r) => setSceneState(r.state))
+      .then((r) => {
+        setSceneState(r.state);
+      })
       .catch(() => undefined);
   }, [level.id]);
   useEffect(() => {
     const t = window.setInterval(() => {
       void sceneApi.save(level.id, sceneState).catch(() => undefined);
     }, 5000);
-    return () => window.clearInterval(t);
+    return () => {
+      window.clearInterval(t);
+    };
   }, [level.id, sceneState]);
 
   const handlePlayerMove = useCallback((p: THREE.Vector3) => {
@@ -233,14 +237,18 @@ export function EscapeRoom3D({
       e.preventDefault();
       if (nearby === 'terminal') onChallenge();
       else if (nearby === 'guide') onClue();
-      else if (nearby === 'door') onDoor();
+      else onDoor();
     };
     window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
+    return () => {
+      window.removeEventListener('keydown', onKey);
+    };
   }, [nearby, onChallenge, onClue, onDoor]);
 
-  // Non-nullable lookups — the fallback keys always exist in these records
+  // Non-nullable lookups — 'forest' key is always present; cast after ?? to narrow out undefined
+  // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
   const npcPos = (NPC_POS[chamberType] ?? NPC_POS['forest'])!;
+  // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
   const npcCfg = (BIOME_NPCS[chamberType] ?? BIOME_NPCS['forest'])!;
   const guideHint = GUIDE_HINTS[chamberType] ?? GUIDE_HINTS['forest'] ?? '';
   const playerShirt = PLAYER_SHIRTS[chamberType] ?? '#16a34a';
@@ -255,7 +263,8 @@ export function EscapeRoom3D({
 
   // Chamber-specific background environment (lights + floor + walls + decor)
   const ChamberEnv: FC<{ completed: boolean; doorPos: [number, number, number] }> = useMemo(
-    () => CHAMBER_ENVS[chamberType] ?? CHAMBER_ENVS['forest']!,
+    // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+    () => (CHAMBER_ENVS[chamberType] ?? CHAMBER_ENVS['forest'])!,
     [chamberType],
   );
 
@@ -335,7 +344,9 @@ export function EscapeRoom3D({
             Quality{' '}
             <select
               value={quality}
-              onChange={(e) => setQuality(e.target.value as typeof quality)}
+              onChange={(e) => {
+                setQuality(e.target.value as typeof quality);
+              }}
               className="ml-1 bg-transparent"
             >
               <option value="low">Low</option>

@@ -1,0 +1,13 @@
+$env:NODE_ENV='development'
+$env:PORT='3000'
+$env:REDIS_URL='redis://localhost:6379'
+$env:DATABASE_URL='postgresql://cte:cte_dev_password@localhost:5432/code_to_escape'
+$env:JWT_SECRET='qa-test-jwt-secret-a74499c0578242d1ab8897169a150175'
+$env:REFRESH_TOKEN_SECRET='qa-test-refresh-a178bfcb73334c2695f2cbe1c35a922c'
+$env:JWT_EXPIRES_IN='15m'
+$env:REFRESH_TOKEN_EXPIRES_IN='30d'
+$env:CORS_ORIGIN='http://localhost:5173'
+$env:TRUST_PROXY_HOPS='0'
+$env:CODE_RUNNER_URL='http://localhost:3002'
+$env:CODE_RUNNER_TOKEN='qa-test-runner-token-e380519bc1d6411ca77d0e73679ef10a'
+node apps/server/dist/app/server.js

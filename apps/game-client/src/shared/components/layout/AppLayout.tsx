@@ -96,7 +96,9 @@ export function AppLayout() {
       if (event.key === 'Escape') setCommandOpen(false);
     };
     window.addEventListener('keydown', onKeyDown);
-    return () => window.removeEventListener('keydown', onKeyDown);
+    return () => {
+      window.removeEventListener('keydown', onKeyDown);
+    };
   }, []);
 
   const finishLogout = async (): Promise<void> => {
@@ -131,7 +133,9 @@ export function AppLayout() {
               <>
                 <button
                   type="button"
-                  onClick={() => setCommandOpen(true)}
+                  onClick={() => {
+                    setCommandOpen(true);
+                  }}
                   className="hidden items-center gap-2 rounded-md border border-ink-border bg-ink-surface px-3 py-1.5 text-xs text-zinc-400 hover:border-amber-400/60 hover:text-zinc-100 lg:flex"
                   aria-label="Open command palette"
                 >
@@ -328,7 +332,9 @@ export function AppLayout() {
           <div className="mt-8 border-t border-ink-border pt-4">
             <button
               type="button"
-              onClick={() => setCommandOpen(true)}
+              onClick={() => {
+                setCommandOpen(true);
+              }}
               className="flex w-full items-center justify-between rounded-md px-3 py-2 text-left text-xs text-zinc-500 hover:bg-ink-elevated hover:text-zinc-200"
             >
               <span>Command palette</span>
@@ -350,13 +356,17 @@ export function AppLayout() {
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             className="fixed inset-0 z-50 grid place-items-start bg-black/60 p-4 pt-[14vh] backdrop-blur-sm"
-            onMouseDown={() => setCommandOpen(false)}
+            onMouseDown={() => {
+              setCommandOpen(false);
+            }}
           >
             <motion.div
               initial={{ y: -8 }}
               animate={{ y: 0 }}
               className="w-full max-w-xl rounded-lg border border-ink-strong bg-ink-elevated p-2"
-              onMouseDown={(event) => event.stopPropagation()}
+              onMouseDown={(event) => {
+                event.stopPropagation();
+              }}
             >
               <div className="border-b border-ink-border px-3 py-3">
                 <h2

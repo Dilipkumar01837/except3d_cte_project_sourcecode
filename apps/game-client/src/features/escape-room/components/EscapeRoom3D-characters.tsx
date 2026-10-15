@@ -7,7 +7,7 @@
  *   TerminalKeeper – NPC standing at the challenge terminal.
  */
 
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useFrame } from '@react-three/fiber';
 import { Html } from '@react-three/drei';
 import * as THREE from 'three';
@@ -200,7 +200,9 @@ export function GuideNPC({
         setBubble(hintText.slice(0, charIdx.current));
         if (charIdx.current >= hintText.length) clearInterval(interval);
       }, 28);
-      return () => clearInterval(interval);
+      return () => {
+        clearInterval(interval);
+      };
     }
     if (!isNearby) {
       typing.current = false;

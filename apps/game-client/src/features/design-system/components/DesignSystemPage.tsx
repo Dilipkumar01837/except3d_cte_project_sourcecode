@@ -81,7 +81,9 @@ export function DesignSystemPage() {
           </div>
           <button
             type="button"
-            onClick={() => setModalOpen(true)}
+            onClick={() => {
+              setModalOpen(true);
+            }}
             className="rounded-md border border-ink-border px-3 py-2 text-sm text-zinc-300 hover:border-amber-400/60"
           >
             Open dialog
@@ -99,7 +101,9 @@ export function DesignSystemPage() {
             <button
               key={item}
               type="button"
-              onClick={() => setTab(item)}
+              onClick={() => {
+                setTab(item);
+              }}
               className={`border-b-2 px-1 pb-3 text-sm ${tab === item ? 'border-amber-400 text-amber-300' : 'border-transparent text-zinc-500 hover:text-zinc-200'}`}
             >
               {item}
@@ -129,11 +133,15 @@ export function DesignSystemPage() {
           role="dialog"
           aria-modal="true"
           className="fixed inset-0 z-50 grid place-items-center bg-black/60 p-4 backdrop-blur-sm"
-          onClick={() => setModalOpen(false)}
+          onClick={() => {
+            setModalOpen(false);
+          }}
         >
           <div
             className="w-full max-w-md rounded-lg border border-ink-strong bg-ink-elevated p-5"
-            onClick={(event) => event.stopPropagation()}
+            onClick={(event) => {
+              event.stopPropagation();
+            }}
           >
             <h2 className="text-lg font-semibold">Dialog surface</h2>
             <p className="mt-2 text-sm text-zinc-400">
@@ -141,7 +149,9 @@ export function DesignSystemPage() {
             </p>
             <button
               type="button"
-              onClick={() => setModalOpen(false)}
+              onClick={() => {
+                setModalOpen(false);
+              }}
               className="mt-5 rounded-md bg-amber-400 px-3 py-2 text-sm font-bold text-black"
             >
               Close
