@@ -8,9 +8,10 @@
  */
 
 import { expect, test } from '@playwright/test';
-import { registerAndLogin, testEmail, testUsername } from './helpers';
+import { prefer2DRoom, registerAndLogin, testEmail, testUsername } from './helpers';
 
 async function enterFirstRoom(page: import('@playwright/test').Page): Promise<string> {
+  await prefer2DRoom(page);
   await registerAndLogin(page, testEmail(), testUsername());
   await page.goto('/worlds');
   await page

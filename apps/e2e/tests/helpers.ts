@@ -45,6 +45,24 @@ export async function registerAndLogin(
   await page.waitForURL('/dashboard', { timeout: 15_000 });
 }
 
+/**
+ * Select the 2D room renderer for this page.
+ *
+ * The escape room defaults to the 3D scene and remembers the choice in
+ * `cte:3d-room`. The 2D-room specs (explorer avatar, minimap, on-canvas objects)
+ * only exist in the `RoomCanvas` renderer, so they opt into it the same way the
+ * in-app "Use 2D room" toggle does, rather than depending on the default.
+ */
+export async function prefer2DRoom(page: Page): Promise<void> {
+  await page.addInitScript(() => {
+    try {
+      window.localStorage.setItem('cte:3d-room', 'off');
+    } catch {
+      // localStorage unavailable — the room still renders in its default mode.
+    }
+  });
+}
+
 /** Login an existing player through the UI. */
 export async function loginPlayer(
   page: Page,

@@ -8,12 +8,13 @@
  */
 
 import { test, expect } from '@playwright/test';
-import { testEmail, testUsername, registerAndLogin, setEditorCode } from './helpers';
+import { prefer2DRoom, testEmail, testUsername, registerAndLogin, setEditorCode } from './helpers';
 
 const SINGLE_LINE_SUM = 'print(sum(map(int,input().split())))';
 
 test.describe('World unlock after a real solve', () => {
   test('solving the first level grants its key and opens the locked level', async ({ page }) => {
+    await prefer2DRoom(page);
     await registerAndLogin(page, testEmail(), testUsername());
 
     await page.goto('/worlds');
