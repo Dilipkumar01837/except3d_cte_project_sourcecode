@@ -1,6 +1,7 @@
 import { Router, type IRouter } from 'express';
 import { authenticate } from '../../shared/middleware/authenticate.js';
 import { asyncHandler } from '../../shared/middleware/error-handler.js';
+import { submissionRateLimit } from '../../shared/middleware/rate-limit.js';
 import {
   createDuelHandler,
   createDuelSubmissionHandler,
@@ -15,4 +16,8 @@ duelRouter.get('/', asyncHandler(listDuels));
 duelRouter.post('/', asyncHandler(createDuelHandler));
 duelRouter.get('/:duelId', asyncHandler(getDuelHandler));
 duelRouter.post('/:duelId/join', asyncHandler(joinDuelHandler));
-duelRouter.post('/:duelId/submissions', asyncHandler(createDuelSubmissionHandler));
+duelRouter.post(
+  '/:duelId/submissions',
+  submissionRateLimit,
+  asyncHandler(createDuelSubmissionHandler),
+);

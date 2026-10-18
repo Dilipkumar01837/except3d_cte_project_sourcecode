@@ -5,7 +5,7 @@ import { prisma } from '../../shared/lib/prisma.js';
 import { sendError, sendSuccess } from '../../shared/lib/response.js';
 import { enqueueSubmission } from './execution.queue.js';
 import { executeWithRunner, JudgeServiceError } from './judge-execution.js';
-import { getHintQuota } from './hint-quota.js';
+import { reserveHintSlot, HintQuotaExceededError } from './hint-quota.js';
 import {
   AiHintUnavailableError,
   generateAiErrorHint,
@@ -165,18 +165,29 @@ export async function getAiHint(req: Request, res: Response): Promise<void> {
     sendError(res, 404, 'NOT_FOUND', 'Challenge not found');
     return;
   }
-  const quota = await getHintQuota(id, {
-    windowMs: env.aiHintWindowMs,
-    limit: env.aiHintDailyLimit,
-  });
-  if (quota.remaining <= 0) {
-    sendError(
-      res,
-      429,
-      'HINT_QUOTA_EXCEEDED',
-      `You have used all ${String(quota.limit)} AI hints for now. Try again after ${quota.resetAt.toISOString()}.`,
+  // Consume the quota slot before the provider call; a check-then-insert race
+  // would let parallel requests overshoot the allowance.
+  let reservationId: string;
+  let quota: Awaited<ReturnType<typeof reserveHintSlot>>['quota'];
+  try {
+    const reservation = await reserveHintSlot(
+      id,
+      { windowMs: env.aiHintWindowMs, limit: env.aiHintDailyLimit },
+      { challengeId: challenge.id, language: body.language as ProgrammingLanguage },
     );
-    return;
+    reservationId = reservation.reservationId;
+    quota = reservation.quota;
+  } catch (error) {
+    if (error instanceof HintQuotaExceededError) {
+      sendError(
+        res,
+        429,
+        'HINT_QUOTA_EXCEEDED',
+        `You have used all ${String(env.aiHintDailyLimit)} AI hints for now. Try again after ${new Date(Date.now() + env.aiHintWindowMs).toISOString()}.`,
+      );
+      return;
+    }
+    throw error;
   }
   try {
     const profile = await prisma.userLearningProfile.findUnique({
@@ -191,14 +202,9 @@ export async function getAiHint(req: Request, res: Response): Promise<void> {
       personalized: profile?.personalizedHintsOptOut !== true,
       requestedType: body.hintType,
     });
-    const record = await prisma.aiHintHistory.create({
-      data: {
-        userId: id,
-        challengeId: challenge.id,
-        language: body.language as ProgrammingLanguage,
-        hint: adaptive.hint,
-      },
-      select: { id: true, resolvedAfter: true, helpful: true },
+    await prisma.aiHintHistory.update({
+      where: { id: reservationId },
+      data: { hint: adaptive.hint },
     });
     await prisma.hintHistory.create({
       data: {
@@ -215,12 +221,15 @@ export async function getAiHint(req: Request, res: Response): Promise<void> {
       hint: adaptive.hint,
       hintType: adaptive.hintType,
       personalized: adaptive.personalized,
-      hintId: record.id,
-      resolvedAfter: record.resolvedAfter,
-      helpful: record.helpful,
-      quota: { ...quota, used: quota.used + 1, remaining: quota.remaining - 1 },
+      hintId: reservationId,
+      resolvedAfter: false,
+      helpful: null,
+      guardrailTriggered: adaptive.guardrailTriggered,
+      quota,
     });
   } catch (error) {
+    // Release the reserved slot so a failed generation does not burn quota.
+    await prisma.aiHintHistory.delete({ where: { id: reservationId } }).catch(() => undefined);
     sendError(
       res,
       503,
@@ -267,18 +276,27 @@ export async function getAiErrorHint(req: Request, res: Response): Promise<void>
     sendError(res, 404, 'NOT_FOUND', 'Challenge not found');
     return;
   }
-  const quota = await getHintQuota(id, {
-    windowMs: env.aiHintWindowMs,
-    limit: env.aiHintDailyLimit,
-  });
-  if (quota.remaining <= 0) {
-    sendError(
-      res,
-      429,
-      'HINT_QUOTA_EXCEEDED',
-      `You have used all ${String(quota.limit)} AI hints for now. Try again after ${quota.resetAt.toISOString()}.`,
+  let reservationId: string;
+  let quota: Awaited<ReturnType<typeof reserveHintSlot>>['quota'];
+  try {
+    const reservation = await reserveHintSlot(
+      id,
+      { windowMs: env.aiHintWindowMs, limit: env.aiHintDailyLimit },
+      { challengeId: challenge.id, language: body.language as ProgrammingLanguage },
     );
-    return;
+    reservationId = reservation.reservationId;
+    quota = reservation.quota;
+  } catch (error) {
+    if (error instanceof HintQuotaExceededError) {
+      sendError(
+        res,
+        429,
+        'HINT_QUOTA_EXCEEDED',
+        `You have used all ${String(env.aiHintDailyLimit)} AI hints for now. Try again after ${new Date(Date.now() + env.aiHintWindowMs).toISOString()}.`,
+      );
+      return;
+    }
+    throw error;
   }
   try {
     const hint = await generateAiErrorHint({
@@ -290,23 +308,22 @@ export async function getAiErrorHint(req: Request, res: Response): Promise<void>
       line: body.line,
       column: body.column,
     });
-    const record = await prisma.aiHintHistory.create({
+    await prisma.aiHintHistory.update({
+      where: { id: reservationId },
       data: {
-        userId: id,
-        challengeId: challenge.id,
-        language: body.language as ProgrammingLanguage,
         hint: `${hint.explanation}\n\nHint: ${hint.hint}${hint.suggestedFix ? `\n\nSuggested direction: ${hint.suggestedFix}` : ''}`,
       },
-      select: { id: true, resolvedAfter: true, helpful: true },
     });
     sendSuccess(res, {
       hint,
-      hintId: record.id,
-      resolvedAfter: record.resolvedAfter,
-      helpful: record.helpful,
-      quota: { ...quota, used: quota.used + 1, remaining: quota.remaining - 1 },
+      hintId: reservationId,
+      resolvedAfter: false,
+      helpful: null,
+      quota,
     });
   } catch (error) {
+    // Release the reserved slot: a blocked or failed generation must not burn quota.
+    await prisma.aiHintHistory.delete({ where: { id: reservationId } }).catch(() => undefined);
     sendError(
       res,
       503,

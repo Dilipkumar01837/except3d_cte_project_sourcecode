@@ -17,10 +17,31 @@ export interface AdaptiveHintResult {
   contextSnapshot: Record<string, unknown>;
   personalized: boolean;
   attemptsBefore: number;
+  guardrailTriggered: boolean;
 }
 
 interface GroqResponse {
   choices?: Array<{ message?: { content?: string | null } }>;
+}
+
+/**
+ * Cheap post-generation guardrail. The system prompt asks the model not to hand
+ * over a complete solution, but prompts are not enforcement; this catches the
+ * common leak shapes (a large code fence, or an explicit "complete solution"
+ * preamble) so callers can substitute a rule-based hint instead of shipping the
+ * full answer to the player.
+ */
+export function looksLikeFullSolution(text: string): boolean {
+  const fenced = [...text.matchAll(/```[a-zA-Z0-9_-]*\n([\s\S]*?)```/g)];
+  const codeLines = fenced.reduce(
+    (total, match) =>
+      total + (match[1] ?? '').split('\n').filter((line) => line.trim().length > 0).length,
+    0,
+  );
+  if (codeLines >= 10) return true;
+  return /here(?:'s| is)\s+(?:the\s+)?(?:complete|final|full)\s+(?:solution|code)|\b(?:complete|final)\s+solution\s*:/i.test(
+    text,
+  );
 }
 
 export async function generateAiHint(input: {
@@ -127,6 +148,13 @@ export async function generateAdaptiveHint(input: {
   const attemptsBefore = await prisma.submission.count({
     where: { userId: input.userId, challengeId: input.challenge.id },
   });
+  // The model needs the actual last failure, not just the long-run error-pattern
+  // category, so the most recent failed submission's diagnostic rides along.
+  const lastSubmission = await prisma.submission.findFirst({
+    where: { userId: input.userId, challengeId: input.challenge.id, status: { not: 'ACCEPTED' } },
+    orderBy: { createdAt: 'desc' },
+    select: { status: true, compilerOutput: true, runtimeOutput: true },
+  });
   const skillLevels = (profile?.skillLevels ?? {}) as Record<string, unknown>;
   const languageSkill = Number(skillLevels[input.language] ?? 1);
   const hintType = chooseAdaptiveHintType(languageSkill, attemptsBefore, input.requestedType);
@@ -149,6 +177,19 @@ export async function generateAdaptiveHint(input: {
     previousHintTypes: previous.map((item) => item.hintType),
     preferredLearningStyle: profile?.preferredLearningStyle ?? null,
   };
+  const lastAttempt =
+    lastSubmission &&
+    [
+      `Last attempt: ${lastSubmission.status}`,
+      lastSubmission.compilerOutput
+        ? `Compiler error:\n${lastSubmission.compilerOutput.slice(0, 600)}`
+        : '',
+      lastSubmission.runtimeOutput
+        ? `Runtime output:\n${lastSubmission.runtimeOutput.slice(0, 600)}`
+        : '',
+    ]
+      .filter(Boolean)
+      .join('\n\n');
   let hint: string;
   try {
     hint = await generateAiHint({
@@ -157,12 +198,20 @@ export async function generateAdaptiveHint(input: {
         input.challenge.statement,
         `Requested hint type: ${hintType}`,
         `Likely error pattern: ${errorPattern ?? 'unknown'}`,
+        lastAttempt ?? '',
         `Do not repeat these hints: ${previous.map((item) => item.hintText).join(' | ')}`,
-      ].join('\n\n'),
+      ]
+        .filter(Boolean)
+        .join('\n\n'),
       language: input.language,
       sourceCode: input.sourceCode,
     });
   } catch {
+    hint = fallbackHint({ hintType, sourceCode: input.sourceCode, errorPattern });
+  }
+  // Enforce the "no full solution" rule on the response, not just in the prompt.
+  const guardrailTriggered = looksLikeFullSolution(hint);
+  if (guardrailTriggered) {
     hint = fallbackHint({ hintType, sourceCode: input.sourceCode, errorPattern });
   }
   return {
@@ -171,6 +220,7 @@ export async function generateAdaptiveHint(input: {
     contextSnapshot,
     personalized: Boolean(profile && !profile.personalizedHintsOptOut),
     attemptsBefore,
+    guardrailTriggered,
   };
 }
 
@@ -223,6 +273,9 @@ export async function generateAiErrorHint(input: {
     if (typeof parsed.explanation !== 'string' || typeof parsed.hint !== 'string') {
       throw new Error('Invalid AI response');
     }
+    assertNoSolutionLeak(parsed.explanation);
+    assertNoSolutionLeak(parsed.hint);
+    if (parsed.suggestedFix) assertNoSolutionLeak(parsed.suggestedFix);
     return {
       explanation: parsed.explanation.slice(0, 2_000),
       hint: parsed.hint.slice(0, 2_000),
@@ -231,5 +284,15 @@ export async function generateAiErrorHint(input: {
     };
   } catch {
     throw new AiHintUnavailableError('AI provider returned an invalid hint.');
+  }
+}
+
+/**
+ * Structured error hints have no rule-based twin to swap in, so a leak-shaped
+ * response is refused outright (the caller answers 503) rather than forwarded.
+ */
+function assertNoSolutionLeak(text: string): void {
+  if (looksLikeFullSolution(text)) {
+    throw new AiHintUnavailableError('AI hint blocked by the solution guardrail.');
   }
 }

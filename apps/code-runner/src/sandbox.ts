@@ -31,14 +31,18 @@ export interface SandboxResponse {
   runtimeOutput?: string;
 }
 
-export async function executeInSandbox(
-  request: Pick<ExecutionRequest, 'language' | 'sourceCode' | 'timeLimitMs' | 'memoryLimitMb'>,
-  input: string,
-): Promise<SandboxResponse> {
-  const controlDir = await mkdtemp(join(tmpdir(), 'cte-runner-'));
-  const cidFile = join(controlDir, 'container-id');
-  const payload = JSON.stringify({ ...request, input });
-  const args = [
+/**
+ * Builds the `docker run` argv for one sandboxed program.
+ *
+ * Kept as a pure function so tests can assert the containment flags directly —
+ * they are the security boundary of the runner and must never silently drop
+ * out of the command line.
+ */
+export function sandboxRunArgs(
+  request: Pick<ExecutionRequest, 'memoryLimitMb'>,
+  cidFile: string,
+): string[] {
+  return [
     'run',
     '-i',
     '--rm',
@@ -67,6 +71,16 @@ export async function executeInSandbox(
     cidFile,
     SANDBOX_IMAGE,
   ];
+}
+
+export async function executeInSandbox(
+  request: Pick<ExecutionRequest, 'language' | 'sourceCode' | 'timeLimitMs' | 'memoryLimitMb'>,
+  input: string,
+): Promise<SandboxResponse> {
+  const controlDir = await mkdtemp(join(tmpdir(), 'cte-runner-'));
+  const cidFile = join(controlDir, 'container-id');
+  const payload = JSON.stringify({ ...request, input });
+  const args = sandboxRunArgs(request, cidFile);
   try {
     return await new Promise<SandboxResponse>((resolve) => {
       const child = spawn('docker', args, { stdio: ['pipe', 'pipe', 'pipe'], windowsHide: true });

@@ -14,22 +14,39 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 const control = {
   ready: true,
   wait: null as null | (() => Promise<void>),
+  lpush: vi.fn<(key: string, value: string) => Promise<number>>(),
+  findMany: vi.fn<(args: unknown) => Promise<Array<{ id: string }>>>(),
 };
 
 vi.mock('../shared/lib/redis.js', () => ({
-  redis: { status: 'ready', setex: () => Promise.resolve('OK') },
+  redis: {
+    status: 'ready',
+    setex: () => Promise.resolve('OK'),
+    lpush: (key: string, value: string) => control.lpush(key, value),
+  },
   isRedisReady: () => control.ready,
   waitForRedisReady: () => (control.wait ? control.wait() : Promise.resolve()),
   connectRedis: () => Promise.resolve(),
 }));
 
-const { startExecutionWorker } = await import('../modules/challenges/execution.worker.js');
+vi.mock('../shared/lib/prisma.js', () => ({
+  prisma: {
+    submission: {
+      findMany: (args: unknown) => control.findMany(args),
+    },
+  },
+}));
+
+const { startExecutionWorker, requeueStuckSubmissions, STUCK_QUEUED_AFTER_MS } =
+  await import('../modules/challenges/execution.worker.js');
 
 const STREAM_ERROR = "Stream isn't writeable and enableOfflineQueue options is false";
 
 beforeEach(() => {
   control.ready = true;
   control.wait = null;
+  control.lpush.mockReset();
+  control.findMany.mockReset();
 });
 
 afterEach(() => {
@@ -126,5 +143,48 @@ describe('startExecutionWorker', () => {
     });
 
     expect(dequeue).not.toHaveBeenCalled();
+  });
+});
+
+describe('requeueStuckSubmissions', () => {
+  const now = new Date('2026-01-01T12:00:00.000Z');
+
+  it('re-enqueues rows stuck in QUEUED past the cutoff', async () => {
+    control.findMany.mockResolvedValue([{ id: 'sub-old' }]);
+    control.lpush.mockResolvedValue(1);
+
+    await expect(requeueStuckSubmissions(now)).resolves.toBe(1);
+
+    expect(control.findMany).toHaveBeenCalledWith({
+      where: {
+        status: 'QUEUED',
+        createdAt: { lte: new Date(now.getTime() - STUCK_QUEUED_AFTER_MS) },
+      },
+      select: { id: true },
+      orderBy: { createdAt: 'asc' },
+      take: 50,
+    });
+    expect(control.lpush).toHaveBeenCalledWith('cte:execution:queue', 'sub-old');
+  });
+
+  it('returns 0 without touching Redis when nothing is stuck', async () => {
+    control.findMany.mockResolvedValue([]);
+
+    await expect(requeueStuckSubmissions(now)).resolves.toBe(0);
+    expect(control.lpush).not.toHaveBeenCalled();
+  });
+
+  it('stops the sweep when Redis rejects the push', async () => {
+    control.findMany.mockResolvedValue([{ id: 'sub-1' }, { id: 'sub-2' }]);
+    control.lpush
+      .mockResolvedValueOnce(1)
+      .mockRejectedValueOnce(new Error("Stream isn't writeable and enableOfflineQueue is false"));
+    const write = vi.spyOn(process.stderr, 'write').mockImplementation(() => true);
+
+    await expect(requeueStuckSubmissions(now)).resolves.toBe(1);
+
+    expect(control.lpush).toHaveBeenCalledTimes(2);
+    const logs = write.mock.calls.map((call) => String(call[0])).join('\n');
+    expect(logs).toContain("Stream isn't writeable");
   });
 });

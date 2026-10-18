@@ -1,4 +1,4 @@
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import request from 'supertest';
 import { createApp } from '../app/create-app.js';
 import { env } from '../config/index.js';
@@ -408,6 +408,121 @@ describe('Challenge system repair — admin CRUD + security + runs', () => {
     });
     expect(resolvedReveal.resolvedAfter).toBe(true);
     expect(resolvedReveal.resolvedAt).not.toBeNull();
+  });
+
+  it('includes the last failed attempt in the AI hint prompt and sends no user identifiers', async () => {
+    await prisma.submission.create({
+      data: {
+        userId: playerId,
+        challengeId,
+        language: 'PYTHON',
+        sourceCode: 'print(flag)',
+        status: 'RUNTIME_ERROR',
+        runtimeOutput: "NameError: name 'flag' is not defined",
+        completedAt: new Date(),
+      },
+    });
+    let sentBody = '';
+    const fetchMock = vi.fn((_url: string, init?: RequestInit) => {
+      sentBody = typeof init?.body === 'string' ? init.body : '';
+      return new Response(
+        JSON.stringify({
+          choices: [
+            {
+              message: {
+                content: 'Check where the flag variable is initialized before it is printed.',
+              },
+            },
+          ],
+        }),
+        { status: 200, headers: { 'content-type': 'application/json' } },
+      );
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    const previousKey = env.groqApiKey;
+    env.groqApiKey = 'test-key';
+    try {
+      const res = await request(app)
+        .post(`/api/v1/challenges/${slug}/hints/ai`)
+        .set('Authorization', auth(playerToken))
+        .send({ language: 'PYTHON', sourceCode: 'print(flag)' });
+      expect(res.status).toBe(200);
+      expect(body<{ hint: string }>(res).data.hint).toContain('flag variable');
+      expect(sentBody).toContain('Last attempt: RUNTIME_ERROR');
+      expect(sentBody).toContain("NameError: name 'flag' is not defined");
+      // Privacy: the prompt must not carry account identifiers.
+      expect(sentBody).not.toContain(playerEmail);
+      expect(sentBody).not.toContain(playerUsername);
+      expect(sentBody).not.toContain(playerId);
+    } finally {
+      vi.unstubAllGlobals();
+      env.groqApiKey = previousKey;
+    }
+  });
+
+  it('swaps a leaked full solution for the rule-based fallback', async () => {
+    const leaked = [
+      'Here is the complete solution:',
+      '```python',
+      ...Array.from({ length: 12 }, (_v, i) => `value${String(i)} = ${String(i)}`),
+      '```',
+    ].join('\n');
+    const fetchMock = vi.fn(
+      () =>
+        new Response(JSON.stringify({ choices: [{ message: { content: leaked } }] }), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        }),
+    );
+    vi.stubGlobal('fetch', fetchMock);
+    const previousKey = env.groqApiKey;
+    env.groqApiKey = 'test-key';
+    try {
+      const res = await request(app)
+        .post(`/api/v1/challenges/${slug}/hints/ai`)
+        .set('Authorization', auth(playerToken))
+        .send({ language: 'PYTHON', sourceCode: 'print(flag)' });
+      expect(res.status).toBe(200);
+      const data = body<{ hint: string; guardrailTriggered: boolean }>(res).data;
+      expect(data.guardrailTriggered).toBe(true);
+      expect(data.hint).not.toContain('value11');
+    } finally {
+      vi.unstubAllGlobals();
+      env.groqApiKey = previousKey;
+    }
+  });
+
+  it('does not overshoot the allowance under parallel requests', async () => {
+    const windowFilter = {
+      userId: playerId,
+      createdAt: { gte: new Date(Date.now() - env.aiHintWindowMs) },
+    };
+    const current = await prisma.aiHintHistory.count({ where: windowFilter });
+    const toFill = env.aiHintDailyLimit - 1 - current;
+    if (toFill > 0) {
+      await prisma.aiHintHistory.createMany({
+        data: Array.from({ length: toFill }, (_v, index) => ({
+          userId: playerId,
+          challengeId,
+          language: 'PYTHON' as const,
+          hint: `parallel fill ${String(index)}`,
+        })),
+      });
+    }
+    const results = await Promise.all(
+      Array.from({ length: 3 }, () =>
+        request(app)
+          .post(`/api/v1/challenges/${slug}/hints/ai`)
+          .set('Authorization', auth(playerToken))
+          .send({ language: 'PYTHON', sourceCode: 'print(1)' }),
+      ),
+    );
+    // Exactly one of the three parallel requests wins the last slot; the
+    // advisory-locked reservation serialises them instead of all passing a
+    // stale count.
+    expect(results.map((res) => res.status).sort()).toEqual([200, 429, 429]);
+    const after = await prisma.aiHintHistory.count({ where: windowFilter });
+    expect(after).toBe(env.aiHintDailyLimit);
   });
 
   it('meters AI hints per user in a rolling window', async () => {

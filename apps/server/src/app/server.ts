@@ -4,7 +4,7 @@ import { createApp } from './create-app.js';
 import { env } from '../config/index.js';
 import { connectRedis } from '../shared/lib/redis.js';
 import { verifyAccessToken } from '../shared/lib/jwt.js';
-import { setSocketServer, authenticatedSockets } from '../shared/lib/socket.js';
+import { setSocketServer, authenticatedSockets, findSocketById } from '../shared/lib/socket.js';
 import { prisma } from '../shared/lib/prisma.js';
 import { seedLeaderboardIfEmpty } from '../shared/lib/leaderboard.js';
 import { attachDuelRealtime } from '../modules/duels/duel-realtime.js';
@@ -102,14 +102,16 @@ export function createHttpServer() {
         const user = byId.get(entry.userId);
         if (!user || !user.isActive) {
           authenticatedSockets.delete(socketId);
-          io.sockets.sockets.get(socketId)?.disconnect(true);
+          // Root and /duel sockets live in different namespace maps; the lookup
+          // must cover both or a suspended dueler stays connected.
+          findSocketById(io, socketId)?.disconnect(true);
           continue;
         }
         // Role changes do not need a disconnect, but the cached copy must not go
         // stale or the socket would keep acting on its original role.
         if (user.role !== entry.role) {
           authenticatedSockets.set(socketId, { userId: entry.userId, role: user.role });
-          const data = io.sockets.sockets.get(socketId)?.data as
+          const data = findSocketById(io, socketId)?.data as
             { userId: string; role: string } | undefined;
           if (data) data.role = user.role;
         }

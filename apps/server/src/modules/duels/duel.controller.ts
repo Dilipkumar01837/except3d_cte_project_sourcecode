@@ -5,6 +5,7 @@ import {
   createDuel,
   createDuelSubmission,
   getDuel,
+  hasActiveDuel,
   joinDuel,
   listOpenDuels,
 } from './duel.service.js';
@@ -40,6 +41,13 @@ export async function createDuelHandler(req: Request, res: Response): Promise<vo
   }
   const duel = await createDuel(userId, challengeId);
   if (!duel) {
+    // createDuel returns null both for an unknown challenge and for the
+    // one-duel-at-a-time guard; report the guard honestly so a player already
+    // in a duel is not told their (valid) challenge id is missing.
+    if (await hasActiveDuel(userId)) {
+      sendError(res, 409, 'DUEL_UNAVAILABLE', 'You are already in an active duel');
+      return;
+    }
     sendError(res, 404, 'NOT_FOUND', 'Published challenge not found');
     return;
   }

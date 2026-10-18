@@ -87,12 +87,15 @@ export async function claimDailyReward(userId: string) {
       throw Object.assign(new Error('Daily reward already claimed today'), { statusCode: 409 });
     }
 
-    // Streak calculation
+    // Streak calculation. A solve on the same UTC day already advanced the
+    // streak; claiming the reward must keep it rather than reset it to 1.
     const lastDate = profile.lastStreakDate ? utcDateString(profile.lastStreakDate) : null;
     const yesterday = utcDateString(new Date(Date.now() - 86_400_000));
 
     let newStreak: number;
-    if (lastDate === yesterday) {
+    if (lastDate === todayStr) {
+      newStreak = profile.codingStreak;
+    } else if (lastDate === yesterday) {
       newStreak = profile.codingStreak + 1;
     } else {
       newStreak = 1; // first claim or streak broken

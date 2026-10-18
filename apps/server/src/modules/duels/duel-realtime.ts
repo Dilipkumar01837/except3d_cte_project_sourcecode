@@ -41,6 +41,8 @@ type LiveState = {
   >;
   spectators: number;
   startedAt: string | null;
+  /** Set once the countdown fires; ready is then latched (see duel:ready). */
+  countdownStarted?: boolean;
 };
 type DuelSocketData = {
   userId?: string;
@@ -48,6 +50,7 @@ type DuelSocketData = {
   spectator?: boolean;
   codeAt?: number;
   chatAt?: number;
+  submitAt?: number;
 };
 
 async function loadState(duelId: string): Promise<LiveState> {
@@ -187,6 +190,13 @@ export function attachDuelRealtime(io: SocketServer): void {
       const result = await access(duelId, identity(socket));
       if (!result?.participant) return ack?.({ ok: false, error: 'FORBIDDEN' });
       const state = await loadState(duelId);
+      if (state.countdownStarted && !ready) {
+        // Ready is latched once the countdown fires. The client's ready button is
+        // a toggle; letting it flip back to false mid-duel would make the live
+        // state disagree with the started duel and re-close the submission gate.
+        ack?.({ ok: true });
+        return;
+      }
       state.players[identity(socket)] ??= {
         ready: false,
         code: '',
@@ -198,6 +208,9 @@ export function attachDuelRealtime(io: SocketServer): void {
       const allReady =
         Object.values(state.players).length === 2 &&
         Object.values(state.players).every((player) => player.ready);
+      // Latch in the same write that arms the countdown, so the simultaneous-start
+      // submission gate stays open for the rest of the duel.
+      if (allReady) state.countdownStarted = true;
       await saveState(duelId, state);
       namespace
         .to(`duel:${duelId}`)
@@ -273,10 +286,18 @@ export function attachDuelRealtime(io: SocketServer): void {
 
     socket.on('duel:submit', async (payload: unknown, ack?: (result: unknown) => void) => {
       const parsed = submitSchema.extend({ duelId: z.string().uuid() }).safeParse(payload);
-      if (!parsed.success || socketData.spectator) {
+      // Submissions trigger real container runs; a 1s per-socket cooldown keeps
+      // the socket path from flooding the execution queue (the HTTP path is
+      // covered by submissionRateLimit).
+      if (
+        !parsed.success ||
+        socketData.spectator ||
+        (socketData.submitAt !== undefined && Date.now() - socketData.submitAt < 1_000)
+      ) {
         ack?.({ ok: false, error: 'INVALID_PAYLOAD' });
         return;
       }
+      socketData.submitAt = Date.now();
       const result = await access(parsed.data.duelId, identity(socket));
       if (!result?.participant) return ack?.({ ok: false, error: 'FORBIDDEN' });
       if (!Object.values(ProgrammingLanguage).includes(parsed.data.language as ProgrammingLanguage))
@@ -310,7 +331,11 @@ export function attachDuelRealtime(io: SocketServer): void {
         return;
       }
       const result = await access(parsed.data.duelId, identity(socket));
-      if (!result) return ack?.({ ok: false, error: 'FORBIDDEN' });
+      // Chat is participant-only: spectators must stay read-only, and a socket
+      // that merely knows the duel UUID (without joining) must not be able to
+      // broadcast into the room. `participant` from access() is the check the
+      // other player actions use.
+      if (!result?.participant) return ack?.({ ok: false, error: 'FORBIDDEN' });
       socketData.chatAt = Date.now();
       namespace.to(`duel:${parsed.data.duelId}`).emit('duel:chat-message', {
         duelId: parsed.data.duelId,

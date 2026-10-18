@@ -3,8 +3,12 @@ import { ProgrammingLanguage } from '@prisma/client';
 import { prisma } from '../../shared/lib/prisma.js';
 import { sendError, sendSuccess } from '../../shared/lib/response.js';
 import { env } from '../../config/index.js';
-import { getHintQuota } from '../challenges/hint-quota.js';
-import { generateAdaptiveHint, type AdaptiveHintType } from '../challenges/ai-hint.service.js';
+import { HintQuotaExceededError, reserveHintSlot } from '../challenges/hint-quota.js';
+import {
+  AiHintUnavailableError,
+  generateAdaptiveHint,
+  type AdaptiveHintType,
+} from '../challenges/ai-hint.service.js';
 
 const hintTypes = ['CONCEPTUAL', 'DIRECTIONAL', 'SPECIFIC', 'EXAMPLE', 'DEBUGGING'] as const;
 
@@ -50,53 +54,72 @@ export async function requestHint(req: Request, res: Response): Promise<void> {
     sendError(res, 404, 'NOT_FOUND', 'Challenge not found');
     return;
   }
-  const quota = await getHintQuota(id, {
-    windowMs: env.aiHintWindowMs,
-    limit: env.aiHintDailyLimit,
-  });
-  if (quota.remaining <= 0) {
-    sendError(res, 429, 'HINT_QUOTA_EXCEEDED', 'Adaptive hint quota exceeded');
-    return;
+  let reservationId: string;
+  let quota: Awaited<ReturnType<typeof reserveHintSlot>>['quota'];
+  try {
+    const reservation = await reserveHintSlot(
+      id,
+      { windowMs: env.aiHintWindowMs, limit: env.aiHintDailyLimit },
+      { challengeId: challenge.id, language: body.language as ProgrammingLanguage },
+    );
+    reservationId = reservation.reservationId;
+    quota = reservation.quota;
+  } catch (error) {
+    if (error instanceof HintQuotaExceededError) {
+      sendError(res, 429, 'HINT_QUOTA_EXCEEDED', 'Adaptive hint quota exceeded');
+      return;
+    }
+    throw error;
   }
-  const profile = await prisma.userLearningProfile.findUnique({
-    where: { userId: id },
-    select: { personalizedHintsOptOut: true },
-  });
-  const adaptive = await generateAdaptiveHint({
-    userId: id,
-    challenge,
-    language: body.language,
-    sourceCode: body.sourceCode,
-    personalized: profile?.personalizedHintsOptOut !== true,
-    requestedType: body.hintType as AdaptiveHintType | undefined,
-  });
-  const record = await prisma.hintHistory.create({
-    data: {
+  try {
+    const profile = await prisma.userLearningProfile.findUnique({
+      where: { userId: id },
+      select: { personalizedHintsOptOut: true },
+    });
+    const adaptive = await generateAdaptiveHint({
       userId: id,
-      challengeId: challenge.id,
-      language: body.language as ProgrammingLanguage,
-      hintType: adaptive.hintType,
-      hintText: adaptive.hint,
-      contextSnapshot: JSON.parse(JSON.stringify(adaptive.contextSnapshot)) as object,
-      attemptsBefore: adaptive.attemptsBefore,
-    },
-    select: { id: true },
-  });
-  await prisma.aiHintHistory.create({
-    data: {
-      userId: id,
-      challengeId: challenge.id,
-      language: body.language as ProgrammingLanguage,
+      challenge,
+      language: body.language,
+      sourceCode: body.sourceCode,
+      personalized: profile?.personalizedHintsOptOut !== true,
+      requestedType: body.hintType as AdaptiveHintType | undefined,
+    });
+    await prisma.aiHintHistory.update({
+      where: { id: reservationId },
+      data: { hint: adaptive.hint },
+    });
+    const record = await prisma.hintHistory.create({
+      data: {
+        userId: id,
+        challengeId: challenge.id,
+        language: body.language as ProgrammingLanguage,
+        hintType: adaptive.hintType,
+        hintText: adaptive.hint,
+        contextSnapshot: JSON.parse(JSON.stringify(adaptive.contextSnapshot)) as object,
+        attemptsBefore: adaptive.attemptsBefore,
+      },
+      select: { id: true },
+    });
+    sendSuccess(res, {
       hint: adaptive.hint,
-    },
-  });
-  sendSuccess(res, {
-    hint: adaptive.hint,
-    hintId: record.id,
-    hintType: adaptive.hintType,
-    personalized: adaptive.personalized,
-    quota: { ...quota, used: quota.used + 1, remaining: quota.remaining - 1 },
-  });
+      hintId: record.id,
+      hintType: adaptive.hintType,
+      personalized: adaptive.personalized,
+      guardrailTriggered: adaptive.guardrailTriggered,
+      quota,
+    });
+  } catch (error) {
+    // Release the reserved slot so a failed generation does not burn quota.
+    await prisma.aiHintHistory.delete({ where: { id: reservationId } }).catch(() => undefined);
+    sendError(
+      res,
+      503,
+      'AI_HINT_UNAVAILABLE',
+      error instanceof AiHintUnavailableError
+        ? error.message
+        : 'AI hints are temporarily unavailable.',
+    );
+  }
 }
 
 export async function rateHint(req: Request, res: Response): Promise<void> {

@@ -49,6 +49,7 @@ describe('Duel lobby and submissions', () => {
   let third: TokenUser;
   let challengeId = '';
   let duelId = '';
+  let lobbyId = '';
 
   beforeAll(async () => {
     [first, second, third] = await Promise.all([register(0), register(1), register(2)]);
@@ -68,6 +69,7 @@ describe('Duel lobby and submissions', () => {
 
   afterAll(async () => {
     if (duelId) await prisma.duelMatch.delete({ where: { id: duelId } }).catch(() => undefined);
+    if (lobbyId) await prisma.duelMatch.delete({ where: { id: lobbyId } }).catch(() => undefined);
     if (challengeId)
       await prisma.challenge.delete({ where: { id: challengeId } }).catch(() => undefined);
     await prisma.user.deleteMany({ where: { email: { in: emails } } }).catch(() => undefined);
@@ -116,6 +118,30 @@ describe('Duel lobby and submissions', () => {
       .send({ language: 'PYTHON', sourceCode: 'print(1)' });
     expect(submitted.status).toBe(202);
     expect(body<{ submission: { duelId: string } }>(submitted).data.submission.duelId).toBe(duelId);
+  });
+
+  it('blocks a user from holding two active duels at once', async () => {
+    // first and second are both ACTIVE in duelId from the join above, so the
+    // one-duel-at-a-time guard must refuse a second duel for either of them.
+    const blockedCreate = await request(app)
+      .post('/api/v1/duels')
+      .set('Authorization', auth(first.accessToken))
+      .send({ challengeId });
+    expect(blockedCreate.status).toBe(409);
+    expect(body(blockedCreate).error?.code).toBe('DUEL_UNAVAILABLE');
+
+    // third is uninvolved and can still open a lobby.
+    const lobby = await request(app)
+      .post('/api/v1/duels')
+      .set('Authorization', auth(third.accessToken))
+      .send({ challengeId });
+    expect(lobby.status).toBe(201);
+    lobbyId = body<{ duel: { id: string } }>(lobby).data.duel.id;
+
+    const blockedJoin = await request(app)
+      .post(`/api/v1/duels/${lobbyId}/join`)
+      .set('Authorization', auth(second.accessToken));
+    expect(blockedJoin.status).toBe(409);
   });
 });
 

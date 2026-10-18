@@ -1,6 +1,6 @@
 import { prisma } from '../../shared/lib/prisma.js';
 import { redis, isRedisReady, waitForRedisReady } from '../../shared/lib/redis.js';
-import { dequeueSubmission } from './execution.queue.js';
+import { dequeueSubmission, enqueueSubmission } from './execution.queue.js';
 import { calculateScore, nextRank } from './scoring.service.js';
 import { emitToUser } from '../../shared/lib/socket.js';
 import { updateLeaderboard } from '../../shared/lib/leaderboard.js';
@@ -160,6 +160,19 @@ export async function executeSubmission(submissionId: string): Promise<void> {
       newXp = profile.xp + reward.xp;
       newLevel = Math.max(1, Math.floor(Math.sqrt(newXp / 100)) + 1);
       completedTotal = profile.completedChallenges + 1;
+      // Coding streak advances on the first accepted solve of a UTC day, is
+      // kept for further solves the same day, and resets after a missed day.
+      // Same UTC day-boundary rule the daily reward uses, so both paths agree.
+      const utcDay = (date: Date): string => date.toISOString().split('T')[0] ?? '';
+      const today = utcDay(new Date());
+      const lastStreakDay = profile.lastStreakDate ? utcDay(profile.lastStreakDate) : null;
+      const yesterday = utcDay(new Date(Date.now() - 86_400_000));
+      const codingStreak =
+        lastStreakDay === today
+          ? profile.codingStreak
+          : lastStreakDay === yesterday
+            ? profile.codingStreak + 1
+            : 1;
       await tx.profile.update({
         where: { userId: submission.userId },
         data: {
@@ -170,6 +183,9 @@ export async function executeSubmission(submissionId: string): Promise<void> {
           completedChallenges: { increment: 1 },
           gamesPlayed: { increment: 1 },
           accuracy: Math.max(profile.accuracy, reward.score / 100),
+          codingStreak,
+          lastStreakDate: new Date(),
+          longestStreak: Math.max(profile.longestStreak, codingStreak),
         },
       });
     } else {
@@ -498,4 +514,66 @@ export async function startExecutionWorker(options: ExecutionWorkerOptions = {})
       await sleep(backoff + jitter, signal);
     }
   }
+}
+
+/**
+ * How long a submission may sit in QUEUED before the sweep re-enqueues it.
+ *
+ * Generous compared to normal latency (a worker BRPOPs within seconds) so a
+ * deep backlog is not churned, while still bounding how long a lost queue
+ * entry can strand a player.
+ */
+export const STUCK_QUEUED_AFTER_MS = 120_000;
+
+/**
+ * Re-enqueues submissions whose queue entry was lost to a worker crash.
+ *
+ * BRPOP is destructive: if the process dies after popping an id but before the
+ * QUEUED→RUNNING claim commits, the Redis list no longer holds the id while the
+ * database row still waits in QUEUED with nothing left to drain it. This sweep
+ * is the visibility timeout that plain list queues lack. Re-pushing is safe
+ * even when the row is merely waiting in a backlog, because the atomic claim
+ * in {@link executeSubmission} lets exactly one duplicate process the row.
+ */
+export async function requeueStuckSubmissions(now = new Date()): Promise<number> {
+  const cutoff = new Date(now.getTime() - STUCK_QUEUED_AFTER_MS);
+  const stuck = await prisma.submission.findMany({
+    where: { status: 'QUEUED', createdAt: { lte: cutoff } },
+    select: { id: true },
+    orderBy: { createdAt: 'asc' },
+    take: 50,
+  });
+  let requeued = 0;
+  for (const { id } of stuck) {
+    try {
+      await enqueueSubmission(id);
+    } catch (error) {
+      // Redis rejected the push; stop this sweep instead of failing per id.
+      // The next interval retries whatever is still stuck.
+      logBackgroundError(`stuck-queue requeue (after ${String(requeued)} id(s))`, error);
+      break;
+    }
+    requeued += 1;
+  }
+  return requeued;
+}
+
+/** Runs {@link requeueStuckSubmissions} on an interval. Returns a stop function. */
+export function startQueueReaper(intervalMs = 60_000): () => void {
+  const timer = setInterval(() => {
+    void requeueStuckSubmissions()
+      .then((count) => {
+        if (count > 0) {
+          process.stderr.write(`[worker] requeued ${String(count)} stuck QUEUED submission(s)\n`);
+        }
+      })
+      .catch((err: unknown) => {
+        process.stderr.write(`[worker] stuck-queue sweep failed: ${String(err)}\n`);
+      });
+  }, intervalMs);
+  // Do not hold the event loop open just for the sweeper.
+  timer.unref();
+  return () => {
+    clearInterval(timer);
+  };
 }
