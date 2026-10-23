@@ -23,6 +23,9 @@ async function submitDuelSolution(page: Page): Promise<void> {
 
 test.describe('Duel lifecycle', () => {
   test('a duel is created, joined, and resolved by a judged submission', async ({ browser }) => {
+    // This test runs two full submission journeys through the worker + code-runner.
+    // Each execution takes up to 45s; the global 60s timeout is too tight.
+    test.setTimeout(180_000);
     const contextA = await browser.newContext();
     const contextB = await browser.newContext();
     const pageA = await contextA.newPage();
