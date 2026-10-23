@@ -583,7 +583,8 @@ Code to Escape is a web-only, responsive platform. The implemented scope include
 
 ## Contributors
 
-- **Dilip Kumar C** — project engineering, platform implementation, infrastructure, and documentation
+- **Dilip Kumar C** — project engineering, platform implementation,
+- **BHuvabn gowda M** infrastructure, and documentation
 
 ---
 

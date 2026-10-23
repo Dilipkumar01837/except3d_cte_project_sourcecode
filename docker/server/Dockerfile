@@ -20,6 +20,8 @@ ENV NODE_ENV=production
 COPY --from=build /app/apps/server/dist ./dist
 COPY --from=build /app/apps/server/package.json ./
 COPY --from=build /app/node_modules ./node_modules
+# Include the Prisma schema so `prisma migrate deploy` can run inside the container
+COPY --from=build /app/database/prisma ./database/prisma
 EXPOSE 3000
 # Default runs the API. The worker uses the same image with
 # `command: node dist/worker.js`; both are required for judging to happen.
