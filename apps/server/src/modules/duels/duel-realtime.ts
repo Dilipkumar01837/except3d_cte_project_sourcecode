@@ -12,7 +12,41 @@ import { createDuelSubmission } from './duel.service.js';
 const duelKey = (duelId: string) => `cte:duel:${duelId}:live`;
 const channel = 'cte:duel:events';
 const MAX_CODE = 100_000;
+const setReadyScript = `
+  local state = cjson.decode(redis.call('GET', KEYS[1]))
+  local userId = ARGV[1]
+  local ready = ARGV[2] == 'true'
 
+  if state.countdownStarted == true and not ready then
+    return {0, 0}
+  end
+
+  if not state.players[userId] then
+    state.players[userId] = {
+      ready = false,
+      code = '',
+      language = 'PYTHON',
+      progress = {passed = 0, total = 0, elapsedMs = 0, language = 'PYTHON', status = 'IDLE'}
+    }
+  end
+  state.players[userId].ready = ready
+
+  local playerCount = 0
+  local allReady = true
+  for _, player in pairs(state.players) do
+    playerCount = playerCount + 1
+    if not player.ready then
+      allReady = false
+    end
+  end
+
+  local shouldStartCountdown = state.countdownStarted ~= true and playerCount == 2 and allReady
+  if shouldStartCountdown then
+    state.countdownStarted = true
+  end
+  redis.call('SETEX', KEYS[1], 86400, cjson.encode(state))
+  return {1, shouldStartCountdown and 1 or 0}
+`;
 const codeUpdateSchema = z.object({
   code: z.string().max(MAX_CODE),
   language: z.string().max(20),
@@ -189,33 +223,22 @@ export function attachDuelRealtime(io: SocketServer): void {
       const { duelId, ready } = parsed.data;
       const result = await access(duelId, identity(socket));
       if (!result?.participant) return ack?.({ ok: false, error: 'FORBIDDEN' });
-      const state = await loadState(duelId);
-      if (state.countdownStarted && !ready) {
-        // Ready is latched once the countdown fires. The client's ready button is
-        // a toggle; letting it flip back to false mid-duel would make the live
-        // state disagree with the started duel and re-close the submission gate.
+      await loadState(duelId);
+      const [updated, shouldStartCountdown] = (await redis.eval(
+        setReadyScript,
+        1,
+        duelKey(duelId),
+        identity(socket),
+        ready ? 'true' : 'false',
+      )) as [number, number];
+      if (updated === 0) {
         ack?.({ ok: true });
         return;
       }
-      state.players[identity(socket)] ??= {
-        ready: false,
-        code: '',
-        language: 'PYTHON',
-        progress: { passed: 0, total: 0, elapsedMs: 0, language: 'PYTHON', status: 'IDLE' },
-      };
-      const player = state.players[identity(socket)];
-      if (player) player.ready = ready;
-      const allReady =
-        Object.values(state.players).length === 2 &&
-        Object.values(state.players).every((player) => player.ready);
-      // Latch in the same write that arms the countdown, so the simultaneous-start
-      // submission gate stays open for the rest of the duel.
-      if (allReady) state.countdownStarted = true;
-      await saveState(duelId, state);
       namespace
         .to(`duel:${duelId}`)
         .emit('duel:ready', { duelId, userId: identity(socket), ready });
-      if (allReady) {
+      if (shouldStartCountdown === 1) {
         namespace.to(`duel:${duelId}`).emit('duel:countdown', { duelId, seconds: 3 });
         setTimeout(
           () => namespace.to(`duel:${duelId}`).emit('duel:countdown', { duelId, seconds: 2 }),
