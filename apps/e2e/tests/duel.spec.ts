@@ -63,6 +63,15 @@ test.describe('Duel lifecycle', () => {
       await expect(pageA.getByText('ACTIVE')).toBeVisible({ timeout: 20_000 });
       await expect(pageB.getByText('ACTIVE')).toBeVisible({ timeout: 20_000 });
 
+      // Submissions are gated until both players ready up and the countdown
+      // starts; wait for the server-driven countdown before submitting.
+      await Promise.all([
+        pageA.getByRole('button', { name: 'Ready up' }).click(),
+        pageB.getByRole('button', { name: 'Ready up' }).click(),
+      ]);
+      await expect(pageA.locator('p.text-4xl')).toBeVisible({ timeout: 10_000 });
+      await expect(pageB.locator('p.text-4xl')).toBeVisible({ timeout: 10_000 });
+
       // Player A's editor was created while the duel was still OPEN, so it
       // mounts read-only; reloading remounts it editable now that B has joined.
       await pageA.reload();
