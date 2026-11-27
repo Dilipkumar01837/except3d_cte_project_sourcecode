@@ -28,11 +28,17 @@ function mountFrontend(app: ReturnType<typeof express>, prefix: string, director
   const root = resolve(directory);
   frontend.use(express.static(root));
   frontend.get('*', (req, res, next) => {
-    if (extname(req.path) || !req.accepts('html')) return next();
+    if (extname(req.path) || !req.accepts('html')) {
+      next();
+      return;
+    }
     res.sendFile('index.html', { root });
   });
   app.use(prefix, (req, res, next) => {
-    if (/^\/(api|socket\.io)(\/|$)/i.test(req.path)) return next();
+    if (/^\/(api|socket\.io)(\/|$)/i.test(req.path)) {
+      next();
+      return;
+    }
     frontend(req, res, next);
   });
 }
