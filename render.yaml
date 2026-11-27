@@ -1,0 +1,87 @@
+envVarGroups:
+  - name: cte-runtime
+    envVars:
+      - key: JWT_SECRET
+        generateValue: true
+      - key: REFRESH_TOKEN_SECRET
+        generateValue: true
+
+services:
+  - type: web
+    name: code-to-escape-web
+    runtime: node
+    plan: starter
+    region: singapore
+    buildCommand: >-
+      corepack pnpm install --frozen-lockfile --prod=false &&
+      corepack pnpm exec turbo run build --filter=@code-to-escape/server --filter=@code-to-escape/game-client --filter=@code-to-escape/admin-dashboard
+    preDeployCommand: corepack pnpm db:migrate:deploy
+    startCommand: cd apps/server && node dist/index.js
+    healthCheckPath: /api/v1/health
+    envVars:
+      - fromGroup: cte-runtime
+      - key: NODE_VERSION
+        value: '22'
+      - key: NODE_ENV
+        value: production
+      - key: GAME_STATIC_DIR
+        value: ../game-client/dist
+      - key: ADMIN_STATIC_DIR
+        value: ../admin-dashboard/dist
+      - key: VITE_ADMIN_BASE
+        value: /admin/
+      - key: DATABASE_URL
+        fromDatabase:
+          name: code-to-escape-db
+          property: connectionString
+      - key: REDIS_URL
+        fromService:
+          type: keyvalue
+          name: code-to-escape-cache
+          property: connectionString
+      - key: CODE_RUNNER_URL
+        sync: false
+      - key: CODE_RUNNER_TOKEN
+        sync: false
+
+  - type: worker
+    name: code-to-escape-worker
+    runtime: node
+    plan: starter
+    region: singapore
+    buildCommand: >-
+      corepack pnpm install --frozen-lockfile --prod=false &&
+      corepack pnpm exec turbo run build --filter=@code-to-escape/server
+    startCommand: cd apps/server && node dist/worker.js
+    envVars:
+      - fromGroup: cte-runtime
+      - key: NODE_VERSION
+        value: '22'
+      - key: NODE_ENV
+        value: production
+      - key: DATABASE_URL
+        fromDatabase:
+          name: code-to-escape-db
+          property: connectionString
+      - key: REDIS_URL
+        fromService:
+          type: keyvalue
+          name: code-to-escape-cache
+          property: connectionString
+      - key: CODE_RUNNER_URL
+        sync: false
+      - key: CODE_RUNNER_TOKEN
+        sync: false
+
+  - type: keyvalue
+    name: code-to-escape-cache
+    plan: starter
+    region: singapore
+    ipAllowList: []
+    maxmemoryPolicy: noeviction
+
+databases:
+  - name: code-to-escape-db
+    plan: basic-256mb
+    region: singapore
+    ipAllowList: []

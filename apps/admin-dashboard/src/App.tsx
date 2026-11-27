@@ -3,7 +3,7 @@ import { AdminRouter } from './app/router/AdminRouter';
 
 export function App() {
   return (
-    <BrowserRouter>
+    <BrowserRouter basename={import.meta.env.BASE_URL}>
       <AdminRouter />
     </BrowserRouter>
   );

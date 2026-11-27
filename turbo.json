@@ -3,6 +3,7 @@
   "tasks": {
     "build": {
       "dependsOn": ["^build"],
+      "env": ["VITE_ADMIN_BASE"],
       "outputs": ["dist/**"]
     },
     "dev": {

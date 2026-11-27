@@ -36,7 +36,9 @@ export const env = {
   // e2e suite). It was previously documented as 3001 here, which silently sent
   // anyone running without a .env to a port nothing else expected.
   port: Number.parseInt(getEnv('PORT', '3000'), 10),
-  corsOrigin: getEnv('CORS_ORIGIN', 'http://localhost:5173').split(','),
+  corsOrigin: getEnv('CORS_ORIGIN', getEnv('RENDER_EXTERNAL_URL', 'http://localhost:5173')).split(
+    ',',
+  ),
   databaseUrl: getEnv(
     'DATABASE_URL',
     'postgresql://cte:cte_dev_password@localhost:5432/code_to_escape',
@@ -46,7 +48,7 @@ export const env = {
   jwtExpiresIn: getEnv('JWT_EXPIRES_IN', '15m'),
   refreshTokenSecret: getSecret('REFRESH_TOKEN_SECRET', 'change-me-in-production-refresh'),
   refreshTokenExpiresIn: getEnv('REFRESH_TOKEN_EXPIRES_IN', '30d'),
-  appUrl: getEnv('APP_URL', 'http://localhost:5173'),
+  appUrl: getEnv('APP_URL', getEnv('RENDER_EXTERNAL_URL', 'http://localhost:5173')),
   // Number of reverse-proxy hops to trust for req.ip. 0 disables it (direct
   // access); 1 is correct when a single nginx sits in front. Trusting more
   // lets a client spoof X-Forwarded-For and bypass IP rate limits.

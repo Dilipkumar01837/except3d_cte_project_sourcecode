@@ -3,6 +3,7 @@ import cookieParser from 'cookie-parser';
 import cors from 'cors';
 import express from 'express';
 import helmet from 'helmet';
+import { extname, resolve } from 'node:path';
 import { API_BASE_PATH } from '@code-to-escape/shared';
 import { env } from '../config/index.js';
 import { healthRouter } from '../modules/health/index.js';
@@ -22,6 +23,20 @@ import { notificationRouter } from '../modules/notifications/notification.routes
 import { learningAdminRouter, learningRouter } from '../modules/learning/learning.routes.js';
 import { hintsRouter } from '../modules/hints/hints.routes.js';
 
+function mountFrontend(app: ReturnType<typeof express>, prefix: string, directory: string) {
+  const frontend = express.Router();
+  const root = resolve(directory);
+  frontend.use(express.static(root));
+  frontend.get('*', (req, res, next) => {
+    if (extname(req.path) || !req.accepts('html')) return next();
+    res.sendFile('index.html', { root });
+  });
+  app.use(prefix, (req, res, next) => {
+    if (/^\/(api|socket\.io)(\/|$)/i.test(req.path)) return next();
+    frontend(req, res, next);
+  });
+}
+
 export function createApp(): ReturnType<typeof express> {
   const app = express();
 
@@ -30,6 +45,11 @@ export function createApp(): ReturnType<typeof express> {
   // lock out every user. Only the configured number of hops is trusted, so a
   // client cannot spoof X-Forwarded-For to bypass IP rate limits.
   app.set('trust proxy', env.trustProxyHops);
+
+  const adminDirectory = process.env['ADMIN_STATIC_DIR'];
+  const gameDirectory = process.env['GAME_STATIC_DIR'];
+  if (adminDirectory) mountFrontend(app, '/admin', adminDirectory);
+  if (gameDirectory) mountFrontend(app, '/', gameDirectory);
 
   // Security headers — helmet sets X-Content-Type-Options, X-Frame-Options, etc.
   // We add an explicit CSP for the API (no browser presentation so restrictive is fine).

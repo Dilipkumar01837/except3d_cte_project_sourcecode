@@ -64,6 +64,17 @@ docs/
 
 ## Prerequisites
 
+### Deploying to Render
+
+The root `render.yaml` provisions a paid web service, submission worker, PostgreSQL database, and Key Value instance in Singapore. The web service serves the game at `/`, the admin dashboard at `/admin/`, and the API at `/api/v1` on the same origin.
+
+1. Push the deployment files to the GitHub branch connected to Render. In the Render dashboard, choose **New > Blueprint** and select that repository and branch.
+2. Host the existing code runner and its sandbox image on a dedicated Docker-capable Linux host. Provide the runner's HTTPS URL and a strong shared token as `CODE_RUNNER_URL` and `CODE_RUNNER_TOKEN` for both services when Render prompts. Configure the same token on the runner. Keep the Docker socket on the runner host.
+3. Review the paid resources before deploying. The web service applies Prisma migrations before startup. Check `/api/v1/health/readiness` on the deployed URL to verify PostgreSQL, Key Value, and runner connectivity.
+4. For a fresh Render database, seed game content by running `corepack pnpm db:seed` from the repository root in the web service shell. Create a production admin with `corepack pnpm --filter @code-to-escape/server exec tsx scripts/create-superuser.ts <email> <username> <password> ADMIN`. Local accounts and records remain in the local database.
+
+### Local development
+
 Install all three before running anything.
 
 | Tool               | Version      | Download                                       |

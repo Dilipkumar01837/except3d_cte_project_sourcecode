@@ -67,7 +67,7 @@ apiClient.interceptors.response.use(
         const err = refreshError instanceof Error ? refreshError : new Error(String(refreshError));
         processQueue(err, null);
         localStorage.removeItem(STORAGE_KEY);
-        window.location.href = '/login';
+        window.location.href = `${import.meta.env.BASE_URL}login`;
         return await Promise.reject(err);
       } finally {
         isRefreshing = false;

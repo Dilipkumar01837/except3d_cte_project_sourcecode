@@ -6,6 +6,7 @@ import { fileURLToPath } from 'node:url';
 const configDir = path.dirname(fileURLToPath(import.meta.url));
 
 export default defineConfig({
+  base: process.env['VITE_ADMIN_BASE'] ?? '/',
   plugins: [react()],
   resolve: {
     alias: {
